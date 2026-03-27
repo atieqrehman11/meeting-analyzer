@@ -38,7 +38,8 @@ Tasks are organized by work stream so team members can work in parallel. Within 
 - [ ] A3. Add participant rate seed data `[Stage 2]`
   - Define `participant_rates` document schema: `{ "id": "rates_{tenant_id}", "type": "participant_rates", "tenant_id": "string", "rates": [{ "participant_id": "string", "display_name": "string", "seniority_level": "string", "hourly_rate": "number", "currency": "string" }] }`
   - Write a seed script that writes a sample document via `StorageBackend.store_document()` — works with both local and Azure backends
-  - _Requirements: 13.1_
+  - Also write a sample `participant_roster` fixture under `./fixtures/participant_roster.json` with a mix of internal, external, and C-level participants for use by `MockGraphClient` during local dev
+  - _Requirements: 13.1, 16.1_
 
 ---
 
@@ -47,15 +48,14 @@ Tasks are organized by work stream so team members can work in parallel. Within 
 - [ ] B1. Scaffold MCP server and implement Stage 1 tools `[Stage 1]`
   - Scaffold FastAPI application runnable locally with `uvicorn`; `AUTH_ENABLED=false` by default — no token middleware in Stage 1
   - Implement `GraphClient` interface with `MockGraphClient` (returns fixture JSON from `./fixtures/`) and `RealGraphClient` stub; controlled by `GRAPH_BACKEND=mock|real` env var
-  - Implement `get_transcript(meeting_id)` — reads via `StorageBackend.get_blob()`
-  - Implement `get_calendar_event(meeting_id)` — delegates to `GraphClient`
-  - Implement `get_participants(meeting_id)` — delegates to `GraphClient`
+  - Implement `get_calendar_event(meeting_id)` — delegates to `GraphClient`; returns subject, body, start/end times, attendees
   - Implement `post_adaptive_card(conversation_id, card_json, update_activity_id?)` — delegates to `GraphClient`; mock mode prints card JSON to stdout and returns fake `activity_id`
   - Implement `store_analysis(document)` — delegates to `StorageBackend.store_document()`; validates `type` and `meeting_id` fields present
   - Implement `get_analysis(meeting_id, document_type)` — delegates to `StorageBackend.get_document()`
   - All tool failures return: `{"error": {"code": "...", "message": "...", "retryable": true|false}}`
   - All tools validate input against JSON Schema; return `VALIDATION_ERROR` for non-conforming inputs
-  - _Requirements: 19.1, 19.2, 19.3, 19.4, 19.5_
+  - Note: `get_transcript`, `get_participants`, and `get_participant_roles` are removed — transcript blob URLs pass via A2A, participant data is captured from the Bot join event
+  - _Requirements: 22.1, 22.2, 22.3, 22.4, 22.5_
 
   - [ ]* B1.1 Write unit tests for MCP tool input validation
     - Test each tool rejects missing required fields with `VALIDATION_ERROR`
@@ -74,8 +74,9 @@ Tasks are organized by work stream so team members can work in parallel. Within 
 - [ ] B2. Add Stage 2 tools to MCP server `[Stage 2]`
   - Add `send_realtime_alert(conversation_id, alert_type, card_json)` — calls `post_adaptive_card` internally; records alert type and timestamp via `StorageBackend.store_document()` for throttle tracking
   - Add `get_participant_rates(meeting_id)` — reads `participant_rates` document via `StorageBackend.get_document()`
+  - Note: `get_participant_roles` is removed — `is_high_value` flag is already in the `participant_roster` document stored by the Bot on join
   - Same input validation and error contract as Stage 1 tools
-  - _Requirements: 19.1 (Stage 2), 12.5, 13.1_
+  - _Requirements: 22.1 (Stage 2), 12.5, 13.1_
 
 - [ ] B3. Add Stage 3 tool to MCP server `[Stage 3]`
   - Add `create_poll(conversation_id, poll_items)` — renders Adaptive Card poll with one entry per action item, each offering "Confirm", "Dispute", "Abstain"; stores poll record via `StorageBackend.store_document()` with `status: "open"` and `closes_at: now + 24h`
@@ -92,12 +93,14 @@ Tasks are organized by work stream so team members can work in parallel. Within 
   - Create `manifest.json` as a template with placeholder Bot Service app ID (not deployed yet)
   - _Requirements: 2.1, 2.2, 2.4, 2.5, 2.6_
 
-- [ ] C2. Implement consent flow `[Stage 1]`
-  - On meeting join event, call MCP `post_adaptive_card` to deliver consent Adaptive Card before any transcription begins
+- [ ] C2. Implement consent flow and participant roster capture `[Stage 1]`
+  - On meeting join event, enrich each participant from the Bot Framework roster: call Graph `GET /users/{id}` per participant to get title; compare domain against tenant domain to set `is_external`; set `is_high_value: true` if external OR title matches CEO/CTO/CFO/COO/CPO/CMO/CXO/President/VP/Director
+  - Store a `participant_roster` document via MCP `store_analysis` containing all enriched participant records — this is the single source of truth for participant data used by all agents
+  - Call MCP `post_adaptive_card` to deliver consent Adaptive Card before any transcription begins
   - Store each participant's consent decision (granted/declined/pending) with timestamp and meeting ID via MCP `store_analysis`
   - Treat participants who do not respond within 2 minutes as having declined
   - If consent card cannot be delivered, abort transcription and log the failure with a reason code
-  - _Requirements: 2.1, 2.2, 2.4, 2.5, 2.6_
+  - _Requirements: 2.1, 2.2, 2.4, 2.5, 2.6, 16.1, 16.2_
 
   - [ ]* C2.1 Write unit tests for consent card rendering
     - Test consent Adaptive Card JSON contains required disclosure text
@@ -106,7 +109,7 @@ Tasks are organized by work stream so team members can work in parallel. Within 
 
 - [ ] C3. Implement post-meeting report delivery `[Stage 1]`
   - Receive compiled Analysis Report from Orchestrator Agent
-  - Deliver report via MCP `post_adaptive_card` as an Adaptive Card with expandable sections: Agenda Adherence, Time Allocation, Action Items, Sentiment Summary, Participation Summary
+  - Deliver report via MCP `post_adaptive_card` as an Adaptive Card with expandable sections: Agenda Adherence, Time Allocation, Action Items, Sentiment Summary, Participation Summary, Meeting Purpose, Professional Tone Summary
   - Send condensed Action Items card to all consenting participants
   - If report delivery fails or exceeds 10 minutes, send a status message to the organizer
   - _Requirements: 15.2, 15.3, 15.4, 15.5_
@@ -133,6 +136,13 @@ Tasks are organized by work stream so team members can work in parallel. Within 
     - Test `excluded_participant_count` equals number of participants with null rates
     - Test card renders correctly when all participants have missing rates
     - _Requirements: 13.5_
+
+- [ ] C4a. Implement Participation Pulse card and silent participant alerts `[Stage 2]`
+  - Every 5 minutes, receive participation snapshot from Orchestrator (which gets it from Sentiment Agent via A2A)
+  - Render Participation Pulse Adaptive Card: active speakers list, silent participants list, per-participant engagement indicator, overall energy level (High/Medium/Low)
+  - First render: call MCP `post_adaptive_card` and store `activity_id`; subsequent updates: call with `update_activity_id` to update in place
+  - When Orchestrator signals a participant has been silent >10 minutes: send private Real_Time_Alert to organizer only via MCP `send_realtime_alert` with `alert_type: "silent_participant"`
+  - _Requirements: 15.1–15.4, 15.7, 15.8_
 
 - [ ] C5. Implement consent poll delivery and report update `[Stage 3]`
   - After delivering Analysis Report, call MCP `create_poll` with one entry per action item; store returned `poll_id` in report document
@@ -263,7 +273,7 @@ Tasks are organized by work stream so team members can work in parallel. Within 
   - Extend 60-second loop: take last 120 seconds of transcript (sliding window), concatenate text, compute cosine similarity against pre-computed agenda topic embeddings using `text-embedding-3-small`
   - If max similarity <0.35 for 3 consecutive windows → call MCP `send_realtime_alert` type `off_track`
   - At T=5min: if no topic has similarity >0.4 in any window → `send_realtime_alert` type `agenda_unclear_5min`
-  - At T=10min: if agenda still unclear → generate suggested agenda via GPT-4o → `send_realtime_alert` type `agenda_unclear_10min`
+  - At T=8min: if agenda still unclear → generate suggested agenda via GPT-4o → `send_realtime_alert` type `agenda_unclear_10min`
   - Throttle: read last alert timestamp via `StorageBackend.get_document()` before sending; max 1 alert per type per 5-minute window
   - _Requirements: 12.1–12.7_
 
@@ -276,6 +286,65 @@ Tasks are organized by work stream so team members can work in parallel. Within 
     - Test agenda-unclear triggers at T=5min when no topic exceeds 0.4
     - Test agenda-unclear does not trigger when at least one topic exceeds 0.4
     - _Requirements: 12.2–12.4_
+
+- [ ] D5a. Implement Meeting Purpose Detection in Orchestrator Agent `[Stage 2]`
+  - On meeting join, retrieve calendar event subject and description via MCP `get_calendar_event`; store as initial purpose hypothesis
+  - At T=2min, take first 2 minutes of transcript segments; prompt GPT-4o with calendar context + transcript to classify Meeting_Purpose as one of: "Decision meeting", "Status update", "Brainstorming", "Client presentation", "Problem-solving"
+  - If detected purpose conflicts with calendar subject, set `meeting_purpose_mismatch: true` in meeting record
+  - Surface classified purpose as Real_Time_Alert Adaptive Card to all participants via MCP `send_realtime_alert`
+  - Every 5 minutes, re-evaluate purpose alignment; if diverged for >5 consecutive minutes, send Real_Time_Alert noting divergence
+  - Persist `meeting_purpose` and `meeting_purpose_mismatch` to meeting record via MCP `store_analysis`
+  - _Requirements: 14.1–14.7_
+
+  - [ ]* D5a.1 Write property test: meeting purpose classification validity
+    - **Property 22: Meeting purpose classification validity** — **Validates: Requirements 14.2**
+
+  - [ ]* D5a.2 Write unit tests for purpose mismatch detection
+    - Test mismatch flag set when detected purpose differs from calendar subject
+    - Test no mismatch flag when detected purpose aligns with calendar subject
+    - _Requirements: 14.4_
+
+- [ ] D5b. Implement Participation Pulse in Sentiment Agent `[Stage 2]`
+  - Every 5 minutes, compute participation snapshot: list of participants who have spoken, list who have not yet spoken, speaking time distribution
+  - Calculate overall meeting energy level (High/Medium/Low) from aggregate of speaking frequency, turn count, and available audio engagement signals
+  - Respond to Orchestrator A2A dispatch `compute_participation_pulse` with structured response (active_speakers, silent_participants, energy_level, per_participant_engagement)
+  - Detect participants silent for >10 consecutive minutes; include in response so Orchestrator can send private organizer alert
+  - Detect significant pitch/tone shifts in real time (if audio available); log with participant identity and transcript timestamp — do NOT trigger any meeting-wide alert
+  - _Requirements: 15.1–15.8_
+
+  - [ ]* D5b.1 Write property test: participation pulse snapshot interval
+    - **Property 26: Participation pulse snapshot interval** — **Validates: Requirements 15.1, 15.3**
+
+  - [ ]* D5b.2 Write unit tests for energy level calculation
+    - Test "High" energy when majority of participants have spoken recently
+    - Test "Low" energy when majority of participants have been silent >5 minutes
+    - Test energy level falls back to transcript-only signals when audio unavailable
+    - _Requirements: 15.7, 15.8_
+
+- [ ] D5c. Implement Professional Tone Monitoring in Orchestrator Agent `[Stage 2]`
+  - On meeting join, read `participant_roster` document from storage via `get_analysis`; if any participant has `is_high_value: true`, set `high_value_participant_mode: true` in meeting record
+  - Every 60 seconds, analyze last 60 seconds of transcript segments for Tone_Issues: aggressive language, dismissive language, interruptions, profanity, disrespectful tone
+  - Classify each detected issue: "Minor" | "Moderate" | "Severe"; in High-Value Participant Mode, treat "Minor" as "Moderate"
+  - On "Moderate" or "Severe": send private Real_Time_Alert to organizer only via MCP `send_realtime_alert` with `alert_type: "tone_private"` — include severity, issue type, and participant ID
+  - If same participant triggers same severity within 3 minutes of prior private alert: send whole-meeting constructive alert via `send_realtime_alert` with `alert_type: "tone_public"` — alert text must NOT name the participant or quote the statement
+  - Log ALL detected Tone_Issues to meeting record via MCP `store_analysis` regardless of whether alert was sent
+  - _Requirements: 16.1–16.10_
+
+  - [ ]* D5c.1 Write property test: high-value participant mode activation
+    - **Property 23: High-value participant mode activation** — **Validates: Requirements 16.1, 16.2**
+
+  - [ ]* D5c.2 Write property test: tone issue private-before-public escalation
+    - **Property 24: Tone issue private-before-public escalation** — **Validates: Requirements 16.6, 16.7**
+
+  - [ ]* D5c.3 Write property test: whole-meeting tone alert anonymity
+    - **Property 25: Whole-meeting tone alert anonymity** — **Validates: Requirements 16.8**
+
+  - [ ]* D5c.4 Write unit tests for tone severity classification
+    - Test "Minor" issue escalated to "Moderate" in High-Value Participant Mode
+    - Test "Minor" issue NOT escalated in standard mode
+    - Test private alert sent on first "Moderate" detection
+    - Test whole-meeting alert sent only after prior private alert within 3 minutes
+    - _Requirements: 16.4, 16.5, 16.6, 16.7_
 
 - [ ] D6. Implement Transcription Agent — batch audio post-processing `[Stage 3]`
   - After meeting ends and final transcript is persisted, trigger Azure AI Speech batch API with stored audio blob URL
@@ -290,7 +359,7 @@ Tasks are organized by work stream so team members can work in parallel. Within 
   - Assign each action item: "Agreed", "Disputed", or "Unresolved"; include supporting transcript excerpts and disagreeing participant names
   - Compute relevance score per participant: `(agenda_aligned_speaking_time / total_speaking_time) × 100` where aligned = segments with cosine similarity ≥0.4 to nearest agenda topic
   - Classify: ≥60% → "Highly Relevant", ≥30% → "Relevant", <30% → "Low Relevance", 0 speaking time → "Observer"
-  - Retrieve participant job titles via MCP `get_participants`
+  - Read participant job titles from the stored `participant_roster` document via `get_analysis` — no additional Graph API call needed
   - _Requirements: 8.1–8.4, 11.1–11.4_
 
   - [ ]* D7.1 Write unit tests for agreement detection

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The Teams Meeting Analysis Bot is an AI-powered agent integrated into Microsoft Teams that automatically joins meetings, captures transcripts with participant consent, and delivers proactive real-time insights during the meeting — then performs deep post-meeting analysis. The key differentiator is the real-time proactive capability: the bot actively monitors the meeting as it happens, detecting when the agenda is unclear, when discussion goes off-track, and surfacing live cost and engagement signals to participants. Post-meeting analysis covers agenda adherence, time allocation, action items, tone and pitch analysis, participant sentiment, engagement levels, and relevance of attendees. Results are delivered via an interactive post-meeting report with a consent/validation poll so participants can confirm or dispute the AI's findings.
+The Teams Meeting Analysis Bot is an AI-powered agent integrated into Microsoft Teams that automatically joins meetings, captures transcripts with participant consent, and delivers proactive real-time insights during the meeting — then performs deep post-meeting analysis. The key differentiators are the real-time proactive capabilities: the bot actively monitors the meeting as it happens, detecting and surfacing the meeting's purpose and objective within the first 2 minutes, monitoring professional tone with heightened sensitivity when high-value participants (external clients or C-level executives) are present, tracking live participation dynamics via a Participation Pulse, detecting when the agenda is unclear, when discussion goes off-track, and surfacing live cost and engagement signals to participants. Post-meeting analysis covers agenda adherence, time allocation, action items, tone and pitch analysis, participant sentiment, engagement levels, and relevance of attendees. Results are delivered via an interactive post-meeting report with a consent/validation poll so participants can confirm or dispute the AI's findings.
 
 Delivery follows a 3-stage incremental approach: Stage 1 (Weeks 1–2) establishes the "Proof of Value" foundation with auto-join, consent, transcription, agenda extraction, and post-meeting summary; Stage 2 (Weeks 3–4) adds "Real-Time Intelligence" with proactive in-meeting alerts and a live cost tracker; Stage 3 (Weeks 5–6) delivers "Deep Analysis" with sentiment, tone and pitch, participant agreement detection, relevance assessment, and consent polls. A Phase 2 post-MVP track covers video analysis, historical dashboards, and PM tool integrations.
 
@@ -43,17 +43,22 @@ GPT-4o is the primary reasoning model. Azure AI Language service handles lower-c
 **Stage 1 — Proof of Value (Weeks 1–2):**
 - Bot auto-joins meetings based on calendar events (no manual invite required)
 - Participant consent enforced before transcription begins
+- Participant roster captured and enriched on join (domain, title, is_external, is_high_value) — stored as a single document, reused by all agents
 - Transcript captured via Teams Graph API / Bot Framework with speaker attribution (text only)
 - Agenda extraction from calendar event or inferred from transcript
 - Post-meeting analysis delivered as an Adaptive Card: agenda adherence, action items, participation breakdown
 - Basic storage: Azure Blob Storage (transcripts) + Azure Cosmos DB (analysis results)
 - A2A orchestration foundation with Orchestrator and specialist agents
-- MCP server with core tools: `get_transcript`, `get_calendar_event`, `get_participants`, `post_adaptive_card`, `store_analysis`, `get_analysis`
+- MCP server with core tools: `get_calendar_event`, `post_adaptive_card`, `store_analysis`, `get_analysis`
 - Privacy and compliance basics (retention, consent, data residency)
 
 **Stage 2 — Real-Time Intelligence (Weeks 3–4):**
 - Real-time proactive insights: agenda clarity alerts, off-track detection, refocus reminders
-- Real-time Meeting Cost Tracker displayed as an Adaptive Card during the meeting
+- Real-time Meeting Purpose and Objective Detection: classify meeting type within first 2 minutes and surface as a Real_Time_Alert card
+- Real-time Agenda Availability and Adherence Alert: immediate check for agenda on join, missing-agenda alert with suggested template within 30 seconds
+- Real-time Voice Pitch, Tone, and Audience Participation Insights: Participation Pulse card every 5 minutes, silent participant alerts, pitch/tone shift logging, meeting energy indicator
+- Real-time Professional Tone Monitoring: continuous tone monitoring, severity classification, High-Value Participant Mode with heightened sensitivity, private organizer alerts and escalation to whole-meeting alerts
+- Real-Time Meeting Cost Tracker displayed as an Adaptive Card during the meeting
 - MCP server extended with: `send_realtime_alert`, `get_participant_rates`
 
 **Stage 3 — Deep Analysis (Weeks 5–6):**
@@ -78,7 +83,7 @@ GPT-4o is the primary reasoning model. Azure AI Language service handles lower-c
 | Backend API | FastAPI (Python) — lightweight, async, OpenAPI-native |
 | Frontend dashboard (Phase 2) | React + Fluent UI v9 |
 | A2A communication | Azure AI Foundry A2A protocol over HTTP with agent endpoints |
-| MCP tooling | Model Context Protocol server exposing tools: `get_transcript`, `get_calendar_event`, `post_adaptive_card`, `create_poll`, `get_participant_rates`, `send_realtime_alert` |
+| MCP tooling | Model Context Protocol server exposing tools: `get_calendar_event`, `post_adaptive_card`, `store_analysis`, `get_analysis`, `get_participant_rates`, `send_realtime_alert`, `create_poll` |
 
 ### Storage Strategy (Cost-Effective)
 
@@ -100,15 +105,15 @@ The MCP server exposes the following tools to agents:
 
 | Tool | Description |
 |---|---|
-| `get_transcript` | Retrieve transcript segments for a meeting ID |
 | `get_calendar_event` | Fetch meeting metadata and agenda from Graph API |
-| `get_participants` | List meeting participants with display names |
 | `post_adaptive_card` | Send an Adaptive Card to a Teams channel or chat |
 | `create_poll` | Create a Teams poll (via Forms or Adaptive Card) |
-| `store_analysis` | Persist analysis results to Cosmos DB |
+| `store_analysis` | Persist analysis results to storage |
 | `get_analysis` | Retrieve prior analysis results |
 | `get_participant_rates` | Retrieve seniority level and hourly rate for each participant for cost calculation |
 | `send_realtime_alert` | Send a proactive in-meeting notification or reminder as an Adaptive Card |
+
+Note: `get_transcript`, `get_participants`, and `get_participant_roles` are removed. Transcript blob URLs pass via A2A. Participant data is captured from the Bot Framework join event and stored as a `participant_roster` document — all agents read from that.
 
 ---
 
@@ -133,6 +138,11 @@ The MCP server exposes the following tools to agents:
 - **Meeting_Cost**: The estimated dollar value consumed by a meeting, calculated from participant count, seniority-based hourly rates, and elapsed meeting time
 - **Tone_Analysis**: Assessment of the emotional quality and manner of speech (e.g., assertive, hesitant, collaborative) derived from audio prosody and linguistic features
 - **Pitch_Analysis**: Measurement of vocal pitch patterns in participant audio to detect stress, confidence, or engagement signals
+- **Meeting_Purpose**: The classified primary objective of a meeting (e.g., "Decision meeting", "Status update", "Brainstorming", "Client presentation", "Problem-solving") as detected by the bot from opening statements and calendar context
+- **Participation_Pulse**: A live Adaptive Card surfaced in the meeting chat every 5 minutes showing active speakers, silent participants, per-participant engagement indicators, and overall meeting energy level
+- **High_Value_Participant**: A meeting participant identified as either external to the tenant (non-tenant domain) or holding a C-level or senior title (CEO, CTO, CFO, COO, CPO, CMO, CXO, President, VP, Director); triggers heightened tone monitoring sensitivity
+- **Tone_Issue**: A detected instance of aggressive, dismissive, profane, or disrespectful language or tone in the meeting, classified by severity as "Minor", "Moderate", or "Severe"
+- **Professional_Tone_Mode**: The standard tone monitoring mode applied to all meetings; when a High_Value_Participant is present, the bot activates heightened sensitivity where "Minor" issues are escalated to "Moderate"
 
 ---
 
@@ -300,26 +310,29 @@ The MCP server exposes the following tools to agents:
 
 #### Acceptance Criteria
 
-1. THE Analysis_Agent SHALL retrieve each Participant's display name and, where available, job title from the Microsoft Graph API via the MCP_Server `get_participants` tool.
+1. THE Analysis_Agent SHALL retrieve each Participant's display name and, where available, job title from the stored `participant_roster` document (populated by the Bot on meeting join — no additional Graph API call required).
 2. THE Analysis_Agent SHALL assess each Participant's relevance to the Agenda topics based on their speaking contributions and the semantic content of those contributions.
 3. THE Analysis_Report SHALL classify each Participant as "Highly Relevant", "Relevant", or "Low Relevance" relative to the Agenda.
 4. IF a Participant attended but made zero speaking contributions, THE Analysis_Agent SHALL classify them as "Observer" rather than applying a relevance score.
 
 ---
 
-### Requirement 12: Real-Time Proactive Insights `[Stage 2 - Real-Time Intelligence]`
+### Requirement 12: Real-Time Proactive Insights and Agenda Availability Alert `[Stage 2 - Real-Time Intelligence]`
 
 **User Story:** As a meeting participant, I want the bot to proactively alert the meeting when the agenda is unclear or the discussion goes off-track, so that the team can self-correct in real time rather than discovering issues after the fact.
 
 #### Acceptance Criteria
 
 1. WHILE a meeting is in progress, THE Orchestrator_Agent SHALL continuously evaluate the Transcript against the Agenda at intervals not exceeding 60 seconds.
-2. WHEN the first 5 minutes of the meeting have elapsed and no clear agenda has been identified from the Transcript or calendar event, THE Bot SHALL send a Real_Time_Alert to the meeting chat recommending that the organizer clarify the meeting purpose.
-3. WHEN the first 10 minutes of the meeting have elapsed and the agenda remains unclear, THE Bot SHALL send a second Real_Time_Alert with a suggested agenda prompt based on the discussion so far.
-4. WHEN the Orchestrator_Agent detects that the current discussion topic has deviated from all Agenda items for more than 3 consecutive minutes, THE Bot SHALL send a Real_Time_Alert identifying the off-agenda topic and suggesting a refocus.
-5. THE Bot SHALL deliver each Real_Time_Alert via the MCP_Server `send_realtime_alert` tool as an Adaptive Card visible to all consenting Participants in the meeting chat.
-6. THE Bot SHALL not send more than one Real_Time_Alert of the same type within any 5-minute window to avoid notification fatigue.
-7. IF the Bot is unable to deliver a Real_Time_Alert, THEN THE Bot SHALL log the failure with the meeting ID, alert type, and reason code.
+2. WHEN the Bot joins a meeting, THE Bot SHALL immediately check the calendar invite for an agenda via the MCP_Server `get_calendar_event` tool.
+3. IF no agenda is found in the calendar invite, THEN THE Bot SHALL send a Real_Time_Alert to the meeting organizer within 30 seconds of joining, notifying them that no agenda was found and suggesting they share one in the chat.
+4. THE missing-agenda Real_Time_Alert SHALL include a suggested agenda template generated from the meeting subject and any available context from the calendar invite.
+5. WHEN the first 5 minutes of the meeting have elapsed and no clear agenda has been identified from the Transcript or calendar event, THE Bot SHALL send a Real_Time_Alert to the meeting chat recommending that the organizer clarify the meeting purpose.
+6. WHEN the first 8 minutes of the meeting have elapsed and the agenda remains unclear, THE Bot SHALL send a second Real_Time_Alert with a suggested agenda prompt based on the discussion so far.
+7. WHEN the Orchestrator_Agent detects that the current discussion topic has deviated from all Agenda items for more than 3 consecutive minutes, THE Bot SHALL send a Real_Time_Alert identifying the off-agenda topic and suggesting a refocus.
+8. THE Bot SHALL deliver each Real_Time_Alert via the MCP_Server `send_realtime_alert` tool as an Adaptive Card visible to all consenting Participants in the meeting chat.
+9. THE Bot SHALL not send more than one Real_Time_Alert of the same type within any 5-minute window to avoid notification fatigue.
+10. IF the Bot is unable to deliver a Real_Time_Alert, THEN THE Bot SHALL log the failure with the meeting ID, alert type, and reason code.
 
 ---
 
@@ -339,7 +352,59 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 14: Audio and Video Post-Processing `[Stage 3 - Deep Analysis / Phase 2 - Video]`
+### Requirement 14: Real-Time Meeting Purpose and Objective Detection `[Stage 2 - Real-Time Intelligence]`
+
+**User Story:** As a meeting participant, I want the bot to identify and display the meeting's purpose and objective at the start, so that everyone is aligned on what the meeting is trying to achieve.
+
+#### Acceptance Criteria
+
+1. WHEN the Bot joins a meeting, THE Orchestrator_Agent SHALL retrieve the calendar event via the MCP_Server `get_calendar_event` tool and analyze the meeting subject and description to form an initial Meeting_Purpose hypothesis.
+2. WHEN the first 2 minutes of the meeting have elapsed, THE Orchestrator_Agent SHALL analyze the opening Transcript segments combined with the calendar event context to classify the Meeting_Purpose as one of: "Decision meeting", "Status update", "Brainstorming", "Client presentation", or "Problem-solving".
+3. WHEN the Meeting_Purpose is classified, THE Bot SHALL surface it as a Real_Time_Alert Adaptive Card visible to all consenting Participants in the meeting chat.
+4. IF the detected Meeting_Purpose conflicts with the calendar invite subject (e.g., invite says "Weekly sync" but discussion signals a client presentation), THEN THE Bot SHALL include a mismatch flag in the Real_Time_Alert card describing the discrepancy.
+5. WHILE a meeting is in progress, THE Orchestrator_Agent SHALL evaluate at intervals not exceeding 5 minutes whether the discussion remains aligned with the detected Meeting_Purpose.
+6. WHEN the Orchestrator_Agent detects that the discussion has diverged from the detected Meeting_Purpose for more than 5 consecutive minutes, THE Bot SHALL send a Real_Time_Alert noting the divergence.
+7. THE Analysis_Report SHALL include the detected Meeting_Purpose, any mismatch flag, and a summary of purpose alignment throughout the meeting.
+
+---
+
+### Requirement 15: Real-Time Voice Pitch, Tone, and Audience Participation Insights `[Stage 2 - Real-Time Intelligence]`
+
+**User Story:** As a meeting organizer, I want real-time visibility into who is participating and how engaged participants are, so that I can actively manage the meeting dynamics.
+
+#### Acceptance Criteria
+
+1. WHILE a meeting is in progress, THE Sentiment_Agent SHALL compute a participation snapshot every 5 minutes containing: list of Participants who have spoken, list of Participants who have not yet spoken, and speaking time distribution across all Participants.
+2. WHEN a participation snapshot is computed, THE Bot SHALL update a Participation_Pulse Adaptive Card in the meeting chat displaying: active speakers, silent Participants, a simple engagement indicator per Participant, and an overall meeting energy level of "High", "Medium", or "Low".
+3. THE Bot SHALL update the Participation_Pulse card in place (not post a new card) at each 5-minute interval.
+4. WHEN a Participant has not spoken for more than 10 consecutive minutes, THE Bot SHALL send a private Real_Time_Alert to the meeting organizer only, suggesting they invite that Participant to contribute.
+5. WHILE a meeting is in progress and audio data is available, THE Transcription_Agent SHALL detect significant pitch or tone shifts in real time (e.g., a Participant's voice becomes notably stressed or elevated) and log each detected shift with the Participant identity and Transcript timestamp.
+6. THE Bot SHALL NOT send any Real_Time_Alert to the meeting chat for individual pitch or tone shifts — pitch shift data SHALL be logged only for inclusion in the post-meeting Analysis_Report.
+7. THE overall meeting energy level displayed on the Participation_Pulse card SHALL be derived from the aggregate of all Participant engagement signals including speaking frequency, turn count, and available audio engagement indicators.
+8. IF audio data is unavailable, THE Sentiment_Agent SHALL compute the participation snapshot and energy level from Transcript data alone and SHALL indicate on the Participation_Pulse card that audio signals are not available.
+
+---
+
+### Requirement 16: Real-Time Professional Tone Monitoring `[Stage 2 - Real-Time Intelligence]`
+
+**User Story:** As a meeting organizer, I want the bot to monitor and help maintain a professional tone, especially when external clients or senior executives are present, so that our meetings reflect well on the organization.
+
+#### Acceptance Criteria
+
+1. WHEN the Bot joins a meeting, THE Bot SHALL enrich each Participant's profile with domain (internal vs external) and title from the Graph API, store the result as a `participant_roster` document, and set `is_high_value: true` for any Participant who is external OR holds a C-level/senior title.
+2. IF any Participant is identified as external (non-tenant domain) OR holds a C-level or senior title (CEO, CTO, CFO, COO, CPO, CMO, CXO, President, VP, or Director), THEN THE Bot SHALL activate High-Value Participant Mode for the duration of the meeting.
+3. WHILE a meeting is in progress, THE Orchestrator_Agent SHALL continuously analyze Transcript segments for Tone_Issues including: aggressive language, dismissive language, interruptions, profanity, and disrespectful tone.
+4. THE Orchestrator_Agent SHALL classify each detected Tone_Issue by severity: "Minor" (slightly informal), "Moderate" (unprofessional), or "Severe" (disrespectful or inappropriate).
+5. WHILE High-Value Participant Mode is active, THE Orchestrator_Agent SHALL treat "Minor" Tone_Issues as "Moderate" severity for the purpose of alert escalation.
+6. WHEN a Tone_Issue of "Moderate" or "Severe" severity is detected, THE Bot SHALL send a private Real_Time_Alert to the meeting organizer only, describing the detected issue, the severity classification, and the Participant who triggered it.
+7. WHEN the same Participant triggers a Tone_Issue of the same severity within 3 minutes of a prior private organizer alert, THE Bot SHALL send a professional and constructive Real_Time_Alert to the whole meeting chat (e.g., "Let's keep our discussion focused and respectful to make the most of everyone's time").
+8. THE whole-meeting Real_Time_Alert SHALL NOT name the specific Participant or quote the problematic statement — it SHALL be general and constructive in tone.
+9. THE Bot SHALL log all detected Tone_Issues with: Transcript timestamp, severity classification, Participant identity, and whether a private alert or whole-meeting alert was sent — regardless of whether any alert was triggered.
+10. THE Analysis_Report SHALL include a Professional Tone summary section listing all logged Tone_Issues with timestamps and severity classifications.
+
+---
+
+### Requirement 17: Audio and Video Post-Processing `[Stage 3 - Deep Analysis / Phase 2 - Video]`
 
 **User Story:** As a meeting organizer, I want the bot to perform deep post-call processing of audio and text data for tone and pitch analysis, so that I receive richer insights than text-based analysis alone can provide.
 
@@ -354,7 +419,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 15: Post-Meeting Analysis Report Delivery `[Stage 1 - Proof of Value]`
+### Requirement 18: Post-Meeting Analysis Report Delivery `[Stage 1 - Proof of Value]`
 
 **User Story:** As a meeting organizer, I want to receive the analysis report in Teams after the meeting ends, so that I can review findings without leaving my workflow.
 
@@ -368,7 +433,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 16: Participant Consent Poll for Analysis Validation `[Stage 3 - Deep Analysis]`
+### Requirement 19: Participant Consent Poll for Analysis Validation `[Stage 3 - Deep Analysis]`
 
 **User Story:** As a meeting participant, I want to confirm or dispute the AI's analysis findings, so that inaccurate conclusions can be flagged before being acted upon.
 
@@ -383,7 +448,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 17: Transcript and Report Storage `[Stage 1 - Proof of Value]`
+### Requirement 20: Transcript and Report Storage `[Stage 1 - Proof of Value]`
 
 **User Story:** As a Teams administrator, I want meeting transcripts and analysis reports stored securely and cost-effectively, so that they can be retrieved for audit or review.
 
@@ -397,7 +462,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 18: Orchestrator and A2A Agent Communication `[Stage 1 - Proof of Value]`
+### Requirement 21: Orchestrator and A2A Agent Communication `[Stage 1 - Proof of Value]`
 
 **User Story:** As a system operator, I want the agents to communicate reliably using A2A protocol, so that the analysis pipeline is robust and observable.
 
@@ -411,14 +476,14 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 19: MCP Server Tool Availability `[Stage 1 - Proof of Value / Stage 2 - Real-Time Intelligence / Stage 3 - Deep Analysis]`
+### Requirement 22: MCP Server Tool Availability `[Stage 1 - Proof of Value / Stage 2 - Real-Time Intelligence / Stage 3 - Deep Analysis]`
 
 **User Story:** As an agent developer, I want a reliable MCP server exposing all required tools, so that agents can access Teams and storage resources without direct SDK dependencies.
 
 #### Acceptance Criteria
 
 1. `[Stage 1]` THE MCP_Server SHALL expose the following core tools: `get_transcript`, `get_calendar_event`, `get_participants`, `post_adaptive_card`, `store_analysis`, `get_analysis`.
-   `[Stage 2]` THE MCP_Server SHALL additionally expose: `send_realtime_alert`, `get_participant_rates`.
+   `[Stage 2]` THE MCP_Server SHALL additionally expose: `send_realtime_alert`, `get_participant_rates`, `get_participant_roles`.
    `[Stage 3]` THE MCP_Server SHALL additionally expose: `create_poll`.
 2. WHEN an agent calls a MCP_Server tool, THE MCP_Server SHALL respond within 5 seconds under normal operating conditions.
 3. IF a MCP_Server tool call fails due to a downstream service error, THEN THE MCP_Server SHALL return a structured error object containing an error code, message, and retryable flag.
@@ -427,7 +492,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 20: Privacy and Compliance `[Stage 1 - Proof of Value]`
+### Requirement 23: Privacy and Compliance `[Stage 1 - Proof of Value]`
 
 **User Story:** As a compliance officer, I want the bot to enforce privacy rules and data handling policies, so that the organization meets its legal obligations.
 
@@ -441,7 +506,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 21: Historical Analysis Dashboard `[Phase 2]`
+### Requirement 24: Historical Analysis Dashboard `[Phase 2]`
 
 **User Story:** As a team leader, I want a web dashboard showing historical meeting analytics across multiple meetings, so that I can identify trends in meeting effectiveness over time.
 
@@ -454,7 +519,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 22: Project Management Tool Integration `[Phase 2]`
+### Requirement 25: Project Management Tool Integration `[Phase 2]`
 
 **User Story:** As a meeting organizer, I want confirmed action items automatically synced to our project management tools, so that I don't have to manually re-enter them.
 
@@ -466,7 +531,7 @@ The MCP server exposes the following tools to agents:
 
 ---
 
-### Requirement 23: Video Data Analysis `[Phase 2]`
+### Requirement 26: Video Data Analysis `[Phase 2]`
 
 **User Story:** As a meeting organizer, I want the bot to analyze video data for engagement signals such as facial expressions and attention, so that I get a fuller picture of participant engagement.
 

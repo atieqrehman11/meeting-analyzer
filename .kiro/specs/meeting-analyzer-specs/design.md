@@ -8,8 +8,8 @@ The Teams Meeting Analysis Bot is an AI-powered multi-agent system that automati
 
 | Stage | Timeline | Theme | Key Deliverables |
 |---|---|---|---|
-| Stage 1 | Weeks 1–2 | Proof of Value | Auto-join, consent, transcription, agenda extraction, post-meeting summary, A2A foundation, MCP core tools |
-| Stage 2 | Weeks 3–4 | Real-Time Intelligence | Proactive in-meeting alerts, live cost tracker, extended MCP tools |
+| Stage 1 | Weeks 1–2 | Proof of Value | Auto-join, consent, participant roster capture, transcription, agenda extraction, post-meeting summary, A2A foundation, MCP core tools |
+| Stage 2 | Weeks 3–4 | Real-Time Intelligence | Meeting purpose detection (T=2min), agenda availability alert (on join), off-track detection, participation pulse (every 5min), professional tone monitoring, live cost tracker |
 | Stage 3 | Weeks 5–6 | Deep Analysis | Sentiment/tone/pitch, agreement detection, relevance assessment, consent poll, audio post-processing |
 | Phase 2 | Post-MVP | Extended Platform | Video analysis, historical dashboard, PM tool integrations |
 
@@ -39,9 +39,7 @@ graph TB
     end
 
     subgraph MCP["MCP Server\nFastAPI on Azure Container Apps"]
-        T1[get_transcript]
         T2[get_calendar_event]
-        T3[get_participants]
         T4[post_adaptive_card]
         T5[store_analysis / get_analysis]
         T6[send_realtime_alert]
@@ -90,28 +88,52 @@ sequenceDiagram
     participant Sent as Sentiment Agent
     participant MCP as MCP Server
 
-    Teams->>Bot: Meeting started event
-    Bot->>Orch: Dispatch: meeting_start(meeting_id)
+    Teams->>Bot: Meeting started event (with participant roster)
+    Bot->>Bot: Enrich roster (domain, title, is_high_value)
+    Bot->>MCP: store_analysis(participant_roster)
+    Bot->>Orch: Dispatch: meeting_start(meeting_id, roster)
     Orch->>MCP: get_calendar_event(meeting_id)
-    MCP-->>Orch: calendar event + agenda
+    MCP-->>Orch: calendar event + agenda (or no agenda)
+    alt No agenda found
+        Orch->>MCP: send_realtime_alert(missing_agenda + template)
+    end
     Orch->>MCP: post_adaptive_card(consent_card)
     MCP-->>Teams: Consent card displayed
 
+    Note over Orch: T=2min — Purpose Detection
+    Orch->>Orch: GPT-4o classify Meeting_Purpose from transcript + calendar
+    Orch->>MCP: send_realtime_alert(purpose_card)
+
     loop Every 60s during meeting
         Orch->>Trans: A2A: capture_transcript_segment
-        Trans->>MCP: get_transcript(meeting_id)
         Trans->>MCP: store_analysis(segment)
-        Trans-->>Orch: segment_stored
-        Orch->>Orch: evaluate_agenda_adherence
+        Trans-->>Orch: segment_stored + blob_url
+        Orch->>Orch: evaluate_agenda_adherence (similarity check)
+        Orch->>Orch: analyze_tone (Tone_Issue detection)
+        alt Off-track or agenda unclear
+            Orch->>MCP: send_realtime_alert(off_track | agenda_unclear)
+        end
+        alt Tone_Issue detected (Moderate/Severe)
+            Orch->>MCP: send_realtime_alert(tone_private → organizer only)
+        end
+    end
+
+    loop Every 5min during meeting
+        Orch->>Sent: A2A: compute_participation_pulse
+        Sent-->>Orch: active_speakers, silent_participants, energy_level
+        Orch->>MCP: post_adaptive_card(participation_pulse_card, update)
+        alt Participant silent >10min
+            Orch->>MCP: send_realtime_alert(silent_participant → organizer only)
+        end
     end
 
     Teams->>Bot: Meeting ended event
     Bot->>Orch: Dispatch: meeting_end(meeting_id)
     Orch->>Trans: A2A: finalize_transcript
-    Trans-->>Orch: transcript_complete
-    par Parallel analysis
-        Orch->>Anal: A2A: analyze_meeting
-        Orch->>Sent: A2A: analyze_sentiment
+    Trans-->>Orch: transcript_complete + blob_url
+    par Parallel post-meeting analysis
+        Orch->>Anal: A2A: analyze_meeting(transcript_blob_url)
+        Orch->>Sent: A2A: analyze_sentiment(transcript_blob_url)
     end
     Anal-->>Orch: analysis_result
     Sent-->>Orch: sentiment_result
@@ -202,6 +224,8 @@ POST /api/graph/webhook     # Graph change notification webhook
 
 **Auto-join flow:** The bot subscribes to `calendarView` change notifications via Graph API. When a new meeting is detected, it schedules a join at the meeting start time using the Graph Communications API `createCall` endpoint, joining as a service participant.
 
+**Participant data capture on join:** When the bot joins a meeting, the Bot Framework meeting join event provides the full participant roster. The bot enriches each participant with domain (internal vs external by comparing against tenant domain) and title from the Graph `GET /users/{id}` API, then stores a `participant_roster` document via `store_analysis`. This single upfront call replaces the need for `get_participants` and `get_participant_roles` MCP tools. The roster document includes: `participant_id`, `display_name`, `domain`, `is_external`, `title`, `is_high_value` (true if external OR title matches CEO/CTO/CFO/COO/CPO/CMO/CXO/President/VP/Director).
+
 ### MCP Server (FastAPI on Azure Container Apps)
 
 The MCP server is the tool layer between agents and external services. Agents never call Graph API or storage directly — all external calls go through MCP tools.
@@ -210,15 +234,15 @@ The MCP server is the tool layer between agents and external services. Agents ne
 
 | Stage | Tool | Description |
 |---|---|---|
-| 1 | `get_transcript` | Retrieve transcript segments for a meeting ID from Blob Storage |
 | 1 | `get_calendar_event` | Fetch meeting metadata and agenda from Graph API |
-| 1 | `get_participants` | List meeting participants with display names and job titles from Graph API |
 | 1 | `post_adaptive_card` | Send or update an Adaptive Card in a Teams channel or chat |
-| 1 | `store_analysis` | Persist analysis results or transcript segments to Cosmos DB / Blob Storage |
-| 1 | `get_analysis` | Retrieve prior analysis results from Cosmos DB |
+| 1 | `store_analysis` | Persist analysis results or transcript segments to storage |
+| 1 | `get_analysis` | Retrieve prior analysis results (used for alert throttle state) |
 | 2 | `send_realtime_alert` | Send a proactive in-meeting Adaptive Card notification |
-| 2 | `get_participant_rates` | Retrieve seniority level and hourly rate per participant |
+| 2 | `get_participant_rates` | Retrieve seniority level and hourly rate per participant for cost tracking |
 | 3 | `create_poll` | Create a Teams poll via Adaptive Card for consent validation |
+
+Note: `get_transcript`, `get_participants`, and `get_participant_roles` are removed. Transcript blob URLs are passed directly via A2A task schemas. Participant data (display name, domain, title, `is_external`, `is_high_value`) is captured from the Bot Framework meeting join event and stored in the meeting record — no separate Graph API call needed.
 
 **Authentication:** All agent requests are authenticated via Azure AD managed identity tokens. The MCP server validates the bearer token on every request before executing any tool.
 
@@ -242,6 +266,9 @@ The Orchestrator is the top-level agent. It owns the meeting lifecycle and route
 - Retrieve calendar event and agenda via MCP
 - Dispatch transcript capture tasks to Transcription Agent
 - Stage 2: Run real-time evaluation loop every 60 seconds — evaluate agenda adherence, trigger alerts
+- Stage 2: Detect meeting purpose within first 2 minutes using GPT-4o on opening transcript + calendar context; surface as Real_Time_Alert card
+- Stage 2: Monitor professional tone continuously; classify Tone_Issues by severity; manage two-stage alert escalation (private organizer → whole meeting)
+- Stage 2: Activate High-Value Participant Mode when external or C-level participants detected from meeting join event data
 - On meeting end: dispatch parallel analysis tasks to Analysis Agent and Sentiment Agent
 - Aggregate results and compile the Analysis Report
 - Deliver report via MCP `post_adaptive_card`
@@ -259,8 +286,32 @@ Every 60 seconds:
    trigger off-track alert
 5. At T=5min: if no agenda topics have similarity > 0.4 in any window,
    trigger agenda-unclear alert
-6. At T=10min: if agenda still unclear, trigger second alert with GPT-4o-generated
+6. At T=8min: if agenda still unclear, trigger second alert with GPT-4o-generated
    suggested agenda from transcript so far
+```
+
+```
+Meeting Purpose Detection (Stage 2):
+1. On meeting join: retrieve calendar event subject and description
+2. At T=2min: take first 2 minutes of transcript segments
+3. Prompt GPT-4o with calendar context + transcript to classify purpose as one of:
+   "Decision meeting" | "Status update" | "Brainstorming" | "Client presentation" | "Problem-solving"
+4. If detected purpose conflicts with calendar subject → include mismatch flag
+5. Surface result as Real_Time_Alert card to all participants
+6. Every 5 minutes: re-evaluate purpose alignment; alert if diverged >5 consecutive minutes
+
+Professional Tone Monitoring (Stage 2):
+1. On meeting join: read `participant_roster` document from storage (populated by Bot on join)
+   If any participant has `is_high_value: true` → activate High-Value Participant Mode
+2. Every 60 seconds: analyze last 60 seconds of transcript for Tone_Issues
+   (aggressive language, dismissive language, interruptions, profanity, disrespectful tone)
+3. Classify severity: "Minor" | "Moderate" | "Severe"
+4. If High-Value Participant Mode active: treat "Minor" as "Moderate"
+5. On "Moderate" or "Severe": send private Real_Time_Alert to organizer only
+   (include: detected issue, severity, participant who triggered it)
+6. If same participant triggers same severity within 3 minutes of prior private alert:
+   send constructive whole-meeting alert (no names, no quotes)
+7. Log ALL detected Tone_Issues regardless of alert sent
 ```
 
 **A2A task schemas:**
@@ -287,6 +338,13 @@ Every 60 seconds:
   "meeting_id": "string",
   "transcript_blob_url": "string",
   "audio_blob_url": "string | null"
+}
+
+// Dispatch to Sentiment Agent: participation pulse
+{
+  "task": "compute_participation_pulse",
+  "meeting_id": "string",
+  "snapshot_number": "number"
 }
 ```
 
@@ -322,6 +380,17 @@ Every 60 seconds:
   "status": "ok | partial | error",
   "participation_summary": [],
   "sections_failed": ["string"],
+  "error": "string | null"
+}
+
+// Response from Sentiment Agent: participation pulse
+{
+  "task": "compute_participation_pulse",
+  "status": "ok | error",
+  "active_speakers": ["participant_id"],
+  "silent_participants": ["participant_id"],
+  "energy_level": "High | Medium | Low",
+  "per_participant_engagement": [{"participant_id": "string", "indicator": "string"}],
   "error": "string | null"
 }
 ```
@@ -364,6 +433,7 @@ Note: No real-time audio processing occurs during the meeting. All audio analysi
 - Extract action items using GPT-4o with structured output
 - Stage 3: Detect participant agreement/disagreement on action items
 - Stage 3: Assess participant relevance to agenda using the formula below
+- Stage 3: Read participant job titles from the stored `participant_roster` document (no additional Graph API call needed)
 
 **Participant relevance formula (Stage 3):**
 
@@ -392,6 +462,10 @@ Classification:
 - Identify sentiment shifts with timestamps
 - Calculate speaking time percentage and turn count per participant
 - Flag low participation (<2%) and dominant speakers (>50%)
+- Stage 2: Compute participation snapshot every 5 minutes: active speakers, silent participants, speaking time distribution
+- Stage 2: Calculate overall meeting energy level (High/Medium/Low) from aggregate engagement signals
+- Stage 2: Detect participants silent for >10 consecutive minutes; notify Orchestrator for private organizer alert
+- Stage 2: Detect significant pitch/tone shifts in real time; log with participant identity and timestamp (no meeting-wide alerts)
 - Stage 3: Incorporate prosody signals (speaking rate, pitch mean/variance) as raw numeric values in the report — these are not classified into custom labels
 
 **Model usage:**
@@ -430,7 +504,11 @@ Classification:
   "created_at": "ISO8601",
   "updated_at": "ISO8601",
   "azure_region": "string",
-  "retention_expires_at": "ISO8601"
+  "retention_expires_at": "ISO8601",
+  "high_value_participant_mode": "boolean",
+  "high_value_participants": ["participant_id"],
+  "meeting_purpose": "Decision meeting | Status update | Brainstorming | Client presentation | Problem-solving | null",
+  "meeting_purpose_mismatch": "boolean"
 }
 ```
 
@@ -509,7 +587,29 @@ Classification:
   "final_meeting_cost": "number | null",
   "sections_unavailable": ["string"],
   "poll_id": "string | null",
-  "poll_status": "pending | open | closed | null"
+  "poll_status": "pending | open | closed | null",
+  "meeting_purpose": "string | null",
+  "meeting_purpose_mismatch": "boolean",
+  "high_value_participant_mode": "boolean",
+  "tone_issues": [
+    {
+      "timestamp": "ISO8601",
+      "participant_id": "string",
+      "severity": "Minor | Moderate | Severe",
+      "issue_type": "aggressive | dismissive | interruption | profanity | disrespectful",
+      "private_alert_sent": "boolean",
+      "meeting_alert_sent": "boolean"
+    }
+  ],
+  "participation_pulse_snapshots": [
+    {
+      "snapshot_number": "number",
+      "captured_at": "ISO8601",
+      "active_speakers": ["participant_id"],
+      "silent_participants": ["participant_id"],
+      "energy_level": "High | Medium | Low"
+    }
+  ]
 }
 ```
 
@@ -816,6 +916,36 @@ Consent revocation: If a participant revokes consent post-meeting, the system de
 *For any* MCP server tool call with input parameters that do not conform to the tool's defined JSON schema, the server must return a validation error response and must not execute the tool's underlying logic. Valid inputs must never be rejected.
 
 **Validates: Requirements 19.4**
+
+### Property 22: Meeting purpose classification validity
+
+*For any* meeting where purpose detection runs, the classified Meeting_Purpose must be exactly one of: "Decision meeting", "Status update", "Brainstorming", "Client presentation", "Problem-solving". No null or unrecognized value is acceptable after the 2-minute detection window.
+
+**Validates: Requirements 14.2**
+
+### Property 23: High-value participant mode activation
+
+*For any* meeting where at least one participant is identified as external (non-tenant domain) OR holds a C-level/senior title, the meeting record's `high_value_participant_mode` field must be `true`. If no such participant exists, the field must be `false`.
+
+**Validates: Requirements 16.1, 16.2**
+
+### Property 24: Tone issue private-before-public escalation
+
+*For any* detected Tone_Issue that results in a whole-meeting alert, there must exist a prior private organizer alert for the same participant and same severity within the preceding 3 minutes. A whole-meeting alert must never be sent without a prior private alert.
+
+**Validates: Requirements 16.6, 16.7**
+
+### Property 25: Whole-meeting tone alert anonymity
+
+*For any* whole-meeting tone alert sent by the bot, the alert text must not contain the participant's display name, participant ID, or any direct quote from the problematic transcript segment.
+
+**Validates: Requirements 16.8**
+
+### Property 26: Participation pulse snapshot interval
+
+*For any* meeting of duration D minutes, the number of participation pulse snapshots must equal floor(D / 5). Each snapshot's `snapshot_number` must increment by 1 and `captured_at` timestamps must be at least 4.5 minutes apart.
+
+**Validates: Requirements 15.1, 15.3**
 
 ---
 
