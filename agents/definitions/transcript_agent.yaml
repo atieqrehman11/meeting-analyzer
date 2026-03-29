@@ -1,0 +1,12 @@
+name: post-meeting-transcription-agent
+description: Batch audio post-processing — prosody extraction and transcript enrichment (Stage 3)
+model: gpt-4o-meeting-bot
+temperature: 0.0
+max_tokens: 1000
+instructions_file: agents/instructions/transcript_agent_v1.md
+tools:
+  - mcp: meeting-bot-mcp-server
+    tools_filter:
+      - store_transcript_segment
+      - store_meeting_record
+response_format: json_object

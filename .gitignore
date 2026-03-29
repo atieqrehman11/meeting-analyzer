@@ -1,2 +1,24 @@
-.vscode
- 
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Environment — never commit real credentials
+.env
+
+# Dependency hash files (regenerated locally)
+*.sha
+
+# Agent IDs written by deploy scripts
+deploy/agent_ids/
+
+# Build artifacts
+site/
+dist/
+build/

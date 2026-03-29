@@ -1,0 +1,14 @@
+name: analysis-agent
+description: Post-meeting analysis — agenda adherence, action items, participant relevance
+model: gpt-4o-meeting-bot          # Foundry deployment name, not Azure OpenAI endpoint
+temperature: 0.2
+max_tokens: 4000
+instructions_file: agents/instructions/analysis_agent_v1.md
+tools:
+  - mcp: meeting-bot-mcp-server    # Foundry MCP registry name
+    tools_filter:
+      - get_calendar_event
+      - get_analysis_report
+      - store_analysis_report
+      - compute_similarity
+response_format: json_object

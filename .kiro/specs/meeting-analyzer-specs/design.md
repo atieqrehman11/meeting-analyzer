@@ -8,9 +8,9 @@ The Teams Meeting Analysis Bot is an AI-powered multi-agent system that automati
 
 | Stage | Timeline | Theme | Key Deliverables |
 |---|---|---|---|
-| Stage 1 | Weeks 1–2 | Proof of Value | Auto-join, consent, participant roster capture, transcription, agenda extraction, post-meeting summary, A2A foundation, MCP core tools |
-| Stage 2 | Weeks 3–4 | Real-Time Intelligence | Meeting purpose detection (T=2min), agenda availability alert (on join), off-track detection, participation pulse (every 5min), professional tone monitoring, live cost tracker |
-| Stage 3 | Weeks 5–6 | Deep Analysis | Sentiment/tone/pitch, agreement detection, relevance assessment, consent poll, audio post-processing |
+| Stage 1 | Weeks 1–2 | Proof of Value | Auto-join, consent (including late-joiner re-consent), participant roster capture, transcription, agenda extraction, post-meeting summary, A2A foundation, MCP core tools |
+| Stage 2 | Weeks 3–4 | Real-Time Intelligence | Meeting purpose detection (T=2min), agenda availability alert (on join), off-track detection, participation pulse (every 5min), professional tone monitoring (text-based only), live cost tracker |
+| Stage 3 | Weeks 5–6 | Deep Analysis | Sentiment, audio prosody (post-meeting batch only), agreement detection, relevance assessment, consent poll |
 | Phase 2 | Post-MVP | Extended Platform | Video analysis, historical dashboard, PM tool integrations |
 
 ---
@@ -41,7 +41,7 @@ graph TB
     subgraph MCP["MCP Server\nFastAPI on Azure Container Apps"]
         T2[get_calendar_event]
         T4[post_adaptive_card]
-        T5[store_analysis / get_analysis]
+        T5[store_* / get_analysis_report]
         T6[send_realtime_alert]
         T7[get_participant_rates]
         T8[create_poll]
@@ -90,15 +90,29 @@ sequenceDiagram
 
     Teams->>Bot: Meeting started event (with participant roster)
     Bot->>Bot: Enrich roster (domain, title, is_high_value)
-    Bot->>MCP: store_analysis(participant_roster)
+    Bot->>MCP: store_meeting_record(participant_roster)
     Bot->>Orch: Dispatch: meeting_start(meeting_id, roster)
     Orch->>MCP: get_calendar_event(meeting_id)
     MCP-->>Orch: calendar event + agenda (or no agenda)
     alt No agenda found
         Orch->>MCP: send_realtime_alert(missing_agenda + template)
     end
-    Orch->>MCP: post_adaptive_card(consent_card)
+    Orch->>MCP: post_adaptive_card(consent_card → all current participants)
     MCP-->>Teams: Consent card displayed
+
+    Note over Bot: Late joiner path (any time during meeting)
+    Teams->>Bot: Participant joined event (late_joiner_id)
+    Bot->>Bot: Check late_joiner_id not in consent_status map
+    Bot->>MCP: post_adaptive_card(consent_card → late_joiner only)
+    MCP-->>Teams: Consent card sent to late joiner
+    Bot->>MCP: store_consent_record(pending, late_joiner_id)
+    alt Late joiner grants consent within 2min
+        Bot->>MCP: store_consent_record(granted, late_joiner_id)
+        Note over Bot,Trans: Late joiner segments captured from this point forward
+    else No response or declined
+        Bot->>MCP: store_consent_record(declined, late_joiner_id)
+        Note over Trans: All utterances from late_joiner_id excluded
+    end
 
     Note over Orch: T=2min — Purpose Detection
     Orch->>Orch: GPT-4o classify Meeting_Purpose from transcript + calendar
@@ -106,10 +120,10 @@ sequenceDiagram
 
     loop Every 60s during meeting
         Orch->>Trans: A2A: capture_transcript_segment
-        Trans->>MCP: store_analysis(segment)
+        Trans->>MCP: store_transcript_segment(segment)
         Trans-->>Orch: segment_stored + blob_url
         Orch->>Orch: evaluate_agenda_adherence (similarity check)
-        Orch->>Orch: analyze_tone (Tone_Issue detection)
+        Orch->>Orch: analyze_tone (text-based Tone_Issue detection — no audio)
         alt Off-track or agenda unclear
             Orch->>MCP: send_realtime_alert(off_track | agenda_unclear)
         end
@@ -137,7 +151,7 @@ sequenceDiagram
     end
     Anal-->>Orch: analysis_result
     Sent-->>Orch: sentiment_result
-    Orch->>MCP: store_analysis(report)
+    Orch->>MCP: store_analysis_report(report)
     Orch->>MCP: post_adaptive_card(report_card)
     MCP-->>Teams: Report delivered
 ```
@@ -149,9 +163,13 @@ stateDiagram-v2
     [*] --> Scheduled: Calendar event detected
     Scheduled --> Joining: T-0 meeting start
     Joining --> ConsentPending: Bot joined
-    ConsentPending --> Transcribing: All consents received
     ConsentPending --> Aborted: Consent send failed
+    ConsentPending --> Transcribing: Initial consents resolved (2min timeout)
+    Transcribing --> LateJoinerConsent: Participant joins mid-meeting
+    LateJoinerConsent --> Transcribing: Late joiner consent resolved (2min timeout)
     Transcribing --> RealTimeAnalysis: Stage 2 enabled
+    RealTimeAnalysis --> LateJoinerConsent: Participant joins mid-meeting
+    LateJoinerConsent --> RealTimeAnalysis: Late joiner consent resolved (Stage 2)
     Transcribing --> Finalizing: Meeting ended
     RealTimeAnalysis --> Finalizing: Meeting ended
     Finalizing --> PostAnalysis: Transcript persisted
@@ -201,6 +219,348 @@ The MCP server is implemented as a lightweight FastAPI (Python) application. Eac
 
 ---
 
+
+---
+
+## Azure AI Foundry Ownership Model
+
+This section defines precisely what is managed inside Azure AI Foundry versus what is owned and versioned in your Git repositories. The guiding principle is: **Foundry owns runtime configuration and hosting; your repo owns all logic, prompts, and schemas.** Nothing that affects system behaviour should exist only inside Foundry with no corresponding source-controlled representation.
+
+---
+
+### Ownership split at a glance
+
+| Concern | Owned by | Where |
+|---|---|---|
+| Agent system prompts (instructions) | Your repo | `agents/instructions/` as versioned `.md` files |
+| Agent model config (model name, temperature, max_tokens) | Your repo | `agents/definitions/` as versioned `.yaml` files |
+| Agent registration (name, ID, tool connections) | Azure AI Foundry | Created/updated by `deploy/register_agents.py` from your repo |
+| A2A transport between agents | Azure AI Foundry | Managed entirely by Foundry — no code required |
+| Agent scaling and hosting (post-meeting agents) | Azure AI Foundry | Managed entirely by Foundry — no container required |
+| Orchestrator hosting (long-running, stateful) | Your repo | Deployed as Azure Container App from `agent-orchestrator/` |
+| MCP server hosting | Your repo | Deployed as Azure Container App from `mcp-server/` |
+| MCP server registration in Foundry | Azure AI Foundry | Registered once via `deploy/register_mcp.py` or Bicep |
+| Model deployments (GPT-4o, embeddings) | Azure AI Foundry | Provisioned via `infra/` Bicep — not clicked in portal |
+| Azure OpenAI connection | Azure AI Foundry | Provisioned via `infra/` Bicep |
+| Cosmos DB / Blob / Speech connections | Azure AI Foundry | Provisioned via `infra/` Bicep |
+| Evaluation runs and tracing | Azure AI Foundry | Used as observability tooling only — not source of truth |
+| Prompt iteration / experimentation | Azure AI Foundry Playground | Scratch work only — must be committed to repo before deploy |
+
+---
+
+### What Azure AI Foundry manages for you (zero code required)
+
+**Agent runtime hosting for Foundry-native agents.** The Analysis Agent, Sentiment Agent, and post-meeting Transcription Agent (Stage 3 batch) run as Foundry-native agents — no Docker image, no Container Registry, no Container App. Foundry hosts them entirely. You define them via the Azure AI Projects SDK; Foundry allocates compute, manages scaling, and exposes their A2A endpoint automatically.
+
+**A2A protocol transport.** The Orchestrator dispatches tasks to specialist agents using Foundry's built-in A2A protocol. Foundry handles message routing, retries at the transport layer, and endpoint resolution. You write the task schemas; Foundry moves the messages.
+
+**MCP tool discovery.** Once your MCP server is registered in Foundry's tool registry (a one-time setup step in `deploy/register_mcp.py`), all Foundry-native agents discover and call your tools automatically using Foundry's auth envelope. No hardcoded MCP URLs in agent code.
+
+**Model endpoint management.** GPT-4o and `text-embedding-3-small` are deployed as named deployments inside your Foundry workspace. Agents reference them by deployment name (`gpt-4o-meeting-bot`), not by endpoint URL. Foundry handles throttling, quota management, and regional failover.
+
+**Secrets and connections.** Foundry's connection store holds references to Cosmos DB, Blob Storage, and Azure AI Speech — authenticated via managed identity. Agents and the MCP server receive connections at runtime from Foundry without any secrets in code or environment variables.
+
+---
+
+### What your repo owns and deploys into Foundry
+
+#### Agent definitions (`agents/definitions/`)
+
+Each agent is defined by a YAML file that is the source of truth for everything Foundry needs to create or update the agent. The deploy script reads this file and calls the Azure AI Projects SDK — the Foundry portal reflects what the YAML says, not the other way around.
+
+```yaml
+# agents/definitions/analysis_agent.yaml
+name: analysis-agent
+description: Post-meeting analysis — agenda adherence, action items, participant relevance
+model: gpt-4o-meeting-bot          # Foundry deployment name, not Azure OpenAI endpoint
+temperature: 0.2
+max_tokens: 4000
+instructions_file: agents/instructions/analysis_agent_v1.md
+tools:
+  - mcp: meeting-bot-mcp-server    # Foundry MCP registry name
+    tools_filter:
+      - get_calendar_event
+      - get_analysis_report
+      - store_analysis_report
+      - compute_similarity
+response_format: json_object
+```
+
+```yaml
+# agents/definitions/sentiment_agent.yaml
+name: sentiment-agent
+description: Post-meeting sentiment, participation scoring, prosody enrichment
+model: gpt-4o-meeting-bot
+temperature: 0.1
+max_tokens: 3000
+instructions_file: agents/instructions/sentiment_agent_v1.md
+tools:
+  - mcp: meeting-bot-mcp-server
+    tools_filter:
+      - get_analysis_report
+      - store_analysis_report
+      - compute_similarity
+response_format: json_object
+```
+
+```yaml
+# agents/definitions/transcript_agent.yaml
+name: transcript-agent
+description: Batch audio post-processing — prosody extraction and transcript enrichment (Stage 3)
+model: gpt-4o-meeting-bot
+temperature: 0.0
+max_tokens: 1000
+instructions_file: agents/instructions/transcript_agent_v1.md
+tools:
+  - mcp: meeting-bot-mcp-server
+    tools_filter:
+      - store_transcript_segment
+      - store_meeting_record
+response_format: json_object
+```
+
+#### Agent instructions (`agents/instructions/`)
+
+System prompts are plain Markdown files, versioned in Git. The filename encodes the version — `analysis_agent_v1.md`, `analysis_agent_v2.md` — so you can diff prompt changes exactly like code changes, roll back with `git revert`, and tag releases that include prompt versions alongside code versions.
+
+```
+agents/
+  instructions/
+    analysis_agent_v1.md
+    sentiment_agent_v1.md
+    transcript_agent_v1.md
+    orchestrator_v1.md     # loaded locally by Orchestrator container at startup
+  definitions/
+    analysis_agent.yaml
+    sentiment_agent.yaml
+    transcript_agent.yaml
+```
+
+The `instructions_file` field in each YAML is a relative path. The deploy script reads the file content and passes it as the `instructions` parameter to `client.agents.create_agent()` or `client.agents.update_agent()`. The prompt text never lives only in Foundry — Foundry is the runtime destination; your repo is the source of record.
+
+**Prompt versioning rule:** The `instructions_file` field always points to a specific versioned filename (e.g. `analysis_agent_v2.md`). When a prompt changes, a new file is created and the YAML is updated to point to it. The old file is never deleted — it provides a complete audit trail of what instructions were active at any given Git commit. A PR that changes agent behaviour always includes both the new `_vN.md` file and the updated YAML reference, making prompt changes reviewable and reversible just like code changes.
+
+#### Deploy script (`deploy/register_agents.py`)
+
+This is the only path through which agents are created or updated in Foundry. Nobody edits agents through the Foundry portal directly. The script is idempotent — if the agent already exists it updates it; if not it creates it.
+
+```python
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+import yaml, pathlib, json
+
+WORKSPACE  = "https://<foundry-workspace>.api.azureml.ms"
+SUB        = "<subscription-id>"
+RG         = "<resource-group>"
+PROJECT    = "<project-name>"
+
+client = AIProjectClient(
+    endpoint=WORKSPACE,
+    credential=DefaultAzureCredential(),
+    subscription_id=SUB,
+    resource_group_name=RG,
+    project_name=PROJECT,
+)
+
+def deploy_agent(definition_path: pathlib.Path):
+    defn         = yaml.safe_load(definition_path.read_text())
+    instructions = pathlib.Path(defn["instructions_file"]).read_text()
+    tools        = build_tool_resources(defn.get("tools", []))
+
+    existing = {a.name: a for a in client.agents.list_agents()}
+
+    params = dict(
+        model=defn["model"],
+        instructions=instructions,
+        temperature=defn.get("temperature", 0.2),
+        tools=tools,
+    )
+
+    if defn["name"] in existing:
+        agent = client.agents.update_agent(existing[defn["name"]].id, **params)
+        print(f"Updated : {agent.name} ({agent.id})")
+    else:
+        agent = client.agents.create_agent(
+            name=defn["name"],
+            description=defn.get("description", ""),
+            **params,
+        )
+        print(f"Created : {agent.name} ({agent.id})")
+
+    # Persist agent ID so the Orchestrator can resolve it at runtime
+    id_path = pathlib.Path(f"deploy/agent_ids/{defn['name']}.txt")
+    id_path.parent.mkdir(exist_ok=True)
+    id_path.write_text(agent.id)
+
+def build_tool_resources(tools_config: list) -> list:
+    # Resolves MCP registry name to Foundry ToolDefinition objects
+    # Exact shape depends on azure-ai-projects SDK version — see Foundry MCP docs
+    result = []
+    for entry in tools_config:
+        if "mcp" in entry:
+            result.append({
+                "type": "mcp",
+                "mcp": {
+                    "server_name": entry["mcp"],
+                    "allowed_tools": entry.get("tools_filter", []),
+                }
+            })
+    return result
+
+if __name__ == "__main__":
+    for defn_file in sorted(pathlib.Path("agents/definitions").glob("*.yaml")):
+        deploy_agent(defn_file)
+```
+
+Agent IDs written to `deploy/agent_ids/` are committed to the repo. The Orchestrator reads them at container startup to resolve A2A dispatch targets without any hardcoded IDs in environment variables.
+
+#### MCP server registration (`deploy/register_mcp.py`)
+
+Run once per environment (dev / staging / prod). Registers your Container App MCP server URL in Foundry's tool registry under the name `meeting-bot-mcp-server`. All agent YAML files reference this registry name — the URL itself never appears in agent definitions.
+
+```python
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+import os
+
+client = AIProjectClient(
+    endpoint=os.environ["FOUNDRY_WORKSPACE"],
+    credential=DefaultAzureCredential(),
+    subscription_id=os.environ["AZURE_SUBSCRIPTION_ID"],
+    resource_group_name=os.environ["AZURE_RESOURCE_GROUP"],
+    project_name=os.environ["FOUNDRY_PROJECT"],
+)
+
+client.connections.create_or_update(
+    connection_name="meeting-bot-mcp-server",
+    properties={
+        "category": "CustomKeys",
+        "target": os.environ["MCP_SERVER_URL"],   # e.g. https://mcp.<env>.azurecontainerapps.io
+        "auth_type": "managed_identity",
+        "metadata": {"type": "mcp"},
+    }
+)
+print(f"MCP server registered: {os.environ['MCP_SERVER_URL']}")
+```
+
+---
+
+### Orchestrator: self-hosted, dispatches to Foundry agents
+
+The Orchestrator is a self-hosted Container App because it runs a stateful 60-second evaluation loop for the duration of each meeting. It uses the Foundry A2A protocol to dispatch tasks to Foundry-native agents, reading agent IDs from the `deploy/agent_ids/` state files at startup.
+
+```python
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+from pathlib import Path
+import json
+
+class Orchestrator:
+    def __init__(self):
+        self.client = AIProjectClient(
+            endpoint=FOUNDRY_WORKSPACE,
+            credential=DefaultAzureCredential(),
+            subscription_id=SUB,
+            resource_group_name=RG,
+            project_name=PROJECT,
+        )
+        # Resolve Foundry agent IDs from repo state files
+        self.analysis_agent_id  = Path("deploy/agent_ids/analysis-agent.txt").read_text().strip()
+        self.sentiment_agent_id = Path("deploy/agent_ids/sentiment-agent.txt").read_text().strip()
+
+        # Load own system prompt from versioned file (not a Foundry-native agent)
+        self.system_prompt = Path("agents/instructions/orchestrator_system_prompt_v1.md").read_text()
+
+    def dispatch_post_meeting_analysis(self, meeting_id: str, transcript_blob_url: str) -> dict:
+        thread = self.client.agents.create_thread()
+        self.client.agents.create_message(
+            thread_id=thread.id,
+            role="user",
+            content=json.dumps({
+                "task": "analyze_meeting",
+                "meeting_id": meeting_id,
+                "transcript_blob_url": transcript_blob_url,
+            })
+        )
+        run = self.client.agents.create_and_process_run(
+            thread_id=thread.id,
+            agent_id=self.analysis_agent_id,
+        )
+        messages = self.client.agents.list_messages(thread_id=thread.id)
+        return json.loads(messages.data[0].content[0].text.value)
+```
+
+---
+
+### Repository structure
+
+```
+repo/
+│
+├── agents/
+│   ├── definitions/                    ← YAML source of truth for all Foundry-native agents
+│   │   ├── analysis_agent.yaml
+│   │   ├── sentiment_agent.yaml
+│   │   └── transcript_agent.yaml
+│   └── instructions/                   ← versioned system prompts — plain Markdown
+│       ├── analysis_agent_v1.md
+│       ├── sentiment_agent_v1.md
+│       ├── transcript_agent_v1.md
+│       └── orchestrator_system_prompt_v1.md
+│
+├── agent-orchestrator/                 ← self-hosted Container App
+│   ├── orchestrator.py
+│   ├── real_time_loop.py
+│   └── Dockerfile
+│
+├── mcp-server/                         ← self-hosted Container App (FastAPI)
+│   ├── main.py
+│   ├── tools/
+│   └── Dockerfile
+│
+├── teams-bot/                          ← Azure Bot Service
+│   ├── bot.py
+│   ├── consent_handler.py
+│   └── Dockerfile
+│
+├── shared-models/                      ← internal Python package
+│   ├── a2a_schemas.py
+│   └── mcp_types.py
+│
+├── deploy/
+│   ├── register_agents.py              ← idempotent Foundry agent create/update
+│   ├── register_mcp.py                 ← MCP server registration in Foundry
+│   └── agent_ids/                      ← Foundry-assigned agent IDs (committed to repo)
+│       ├── analysis-agent.txt
+│       ├── sentiment-agent.txt
+│       └── transcript-agent.txt
+│
+└── infra/
+    ├── main.bicep                      ← Foundry workspace, model deployments, connections
+    ├── cosmos.bicep
+    ├── blob.bicep
+    └── container_apps.bicep
+```
+
+3 self-hosted containers (Orchestrator, MCP server, Teams bot) + 3 Foundry-native agents (Analysis, Sentiment, post-meeting Transcription). No container image required for any Foundry-native agent.
+
+---
+
+### CI/CD pipeline behaviour
+
+| Trigger | What runs | What Foundry sees |
+|---|---|---|
+| PR touching `agents/instructions/*.md` | Prompt lint (token count, required section check) | Nothing — Foundry not touched until merge |
+| Merge to `main` — changed `instructions/` or `definitions/` | `deploy/register_agents.py` | Agent instructions and/or config updated live in Foundry |
+| Merge to `main` — changed `agent-orchestrator/` | Docker build → ACR push → Container App revision | Foundry unchanged |
+| Merge to `main` — changed `mcp-server/` | Docker build → ACR push → Container App revision | MCP URL unchanged; Foundry tool registry unchanged |
+| Merge to `main` — changed `infra/` | `az deployment group create` | Foundry workspace, model deployments, connections updated |
+| New environment (dev / staging / prod) | `infra/` deploy → `register_mcp.py` → `register_agents.py` | Full Foundry workspace created from scratch — no portal clicks |
+
+This pipeline guarantees that the state of Foundry in any environment is fully reproducible from the repo. Standing up a new environment requires three commands and no manual portal work.
+
+
+
 ## Components and Interfaces
 
 ### Bot (Teams Bot Framework SDK — Python)
@@ -211,7 +571,9 @@ The bot is the Teams-facing entry point. It handles all Teams activity events an
 - Register as a Teams application via Azure Bot Service and Teams App Manifest
 - Subscribe to calendar events via Microsoft Graph webhook to detect new meetings
 - Auto-join meetings at scheduled start time using Graph Communications API
-- Deliver consent Adaptive Card on join
+- Deliver consent Adaptive Card on join to all current participants
+- **Late joiner re-consent:** On every `participantJoined` Bot Framework event, check if the joining participant's `participant_id` exists in the meeting's `consent_status` map. If absent, immediately send a targeted consent card to that participant only. Apply the same 2-minute no-response-treated-as-declined rule. Begin capturing that participant's transcript segments only after consent is granted; exclude all prior utterances made before consent was resolved.
+- **Recording status check:** On meeting join, check whether recording is enabled via Graph. If not enabled, send a private alert to the organizer: "Stage 3 prosody analysis will not be available — enable meeting recording to capture audio." Store `recording_enabled: boolean` in the meeting record.
 - Render real-time cost tracker Adaptive Card (Stage 2), updating in-place every 60 seconds
 - Deliver post-meeting report Adaptive Card
 - Deliver consent poll (Stage 3)
@@ -224,7 +586,7 @@ POST /api/graph/webhook     # Graph change notification webhook
 
 **Auto-join flow:** The bot subscribes to `calendarView` change notifications via Graph API. When a new meeting is detected, it schedules a join at the meeting start time using the Graph Communications API `createCall` endpoint, joining as a service participant.
 
-**Participant data capture on join:** When the bot joins a meeting, the Bot Framework meeting join event provides the full participant roster. The bot enriches each participant with domain (internal vs external by comparing against tenant domain) and title from the Graph `GET /users/{id}` API, then stores a `participant_roster` document via `store_analysis`. This single upfront call replaces the need for `get_participants` and `get_participant_roles` MCP tools. The roster document includes: `participant_id`, `display_name`, `domain`, `is_external`, `title`, `is_high_value` (true if external OR title matches CEO/CTO/CFO/COO/CPO/CMO/CXO/President/VP/Director).
+**Participant data capture on join:** When the bot joins a meeting, the Bot Framework meeting join event provides the full participant roster. The bot enriches each participant with domain (internal vs external by comparing against tenant domain) and title from the Graph `GET /users/{id}` API, then stores a `participant_roster` document via `store_meeting_record`. This single upfront call replaces the need for `get_participants` and `get_participant_roles` MCP tools. The roster document includes: `participant_id`, `display_name`, `domain`, `is_external`, `title`, `is_high_value` (true if external OR title matches CEO/CTO/CFO/COO/CPO/CMO/CXO/President/VP/Director). Late joiners are added to this document when their consent is resolved.
 
 ### MCP Server (FastAPI on Azure Container Apps)
 
@@ -235,14 +597,20 @@ The MCP server is the tool layer between agents and external services. Agents ne
 | Stage | Tool | Description |
 |---|---|---|
 | 1 | `get_calendar_event` | Fetch meeting metadata and agenda from Graph API |
+| 1 | `get_recording_status` | Check whether meeting recording is enabled via Graph API |
 | 1 | `post_adaptive_card` | Send or update an Adaptive Card in a Teams channel or chat |
-| 1 | `store_analysis` | Persist analysis results or transcript segments to storage |
-| 1 | `get_analysis` | Retrieve prior analysis results (used for alert throttle state) |
+| 1 | `store_meeting_record` | Persist or update the meeting record document (participant roster, consent status, meeting state) |
+| 1 | `store_transcript_segment` | Persist a single transcript segment to Blob Storage and its metadata to Cosmos DB |
+| 1 | `store_consent_record` | Persist or update a participant consent decision (granted / declined / pending) |
+| 1 | `store_analysis_report` | Persist the compiled analysis report to Cosmos DB and Blob Storage |
+| 1 | `get_analysis_report` | Retrieve a prior analysis report by meeting ID |
+| 1 | `compute_similarity` | Compute cosine similarity between a text input and a list of agenda topic strings; returns per-topic scores and max score. Embeddings are cached per meeting_id. |
 | 2 | `send_realtime_alert` | Send a proactive in-meeting Adaptive Card notification |
 | 2 | `get_participant_rates` | Retrieve seniority level and hourly rate per participant for cost tracking |
+| 2 | `store_cost_snapshot` | Persist a meeting cost snapshot to Cosmos DB |
 | 3 | `create_poll` | Create a Teams poll via Adaptive Card for consent validation |
 
-Note: `get_transcript`, `get_participants`, and `get_participant_roles` are removed. Transcript blob URLs are passed directly via A2A task schemas. Participant data (display name, domain, title, `is_external`, `is_high_value`) is captured from the Bot Framework meeting join event and stored in the meeting record — no separate Graph API call needed.
+Note: `get_transcript`, `get_participants`, and `get_participant_roles` are removed. Transcript blob URLs are passed directly via A2A task schemas. Participant data is captured from the Bot Framework meeting join event and stored in the meeting record — no separate Graph API call needed. All `store_*` tools validate their input against a fixed Pydantic schema before executing; a `VALIDATION_ERROR` is returned for non-conforming inputs, making Req 22.4 enforceable per tool. All tools are deployed from Stage 1 onward; tools not yet active for a given stage return `FEATURE_NOT_ENABLED` rather than 404, avoiding versioning complexity across deployments.
 
 **Authentication:** All agent requests are authenticated via Azure AD managed identity tokens. The MCP server validates the bearer token on every request before executing any tool.
 
@@ -280,8 +648,8 @@ The Orchestrator is the top-level agent. It owns the meeting lifecycle and route
 Every 60 seconds:
 1. Take the last 120 seconds of transcript segments (sliding window)
 2. Concatenate segment text into a single string
-3. Compute cosine similarity between the window embedding and each agenda topic
-   embedding (using text-embedding-3-small for speed, pre-computed at meeting start)
+3. Call MCP compute_similarity(text=window_text, agenda_topics=[...], meeting_id=meeting_id)
+   — embeddings are pre-computed and cached by MCP at meeting start using text-embedding-3-small
 4. If max similarity across all topics < 0.35 for 3 consecutive windows (3 minutes),
    trigger off-track alert
 5. At T=5min: if no agenda topics have similarity > 0.4 in any window,
@@ -300,10 +668,14 @@ Meeting Purpose Detection (Stage 2):
 5. Surface result as Real_Time_Alert card to all participants
 6. Every 5 minutes: re-evaluate purpose alignment; alert if diverged >5 consecutive minutes
 
-Professional Tone Monitoring (Stage 2):
+Professional Tone Monitoring (Stage 2 — text-based only):
+NOTE: Tone monitoring in Stage 2 is performed exclusively on transcript text using GPT-4o.
+No audio or prosody signals are available during the live meeting. Audio-based pitch and
+tone detection is deferred to Stage 3 post-meeting batch processing.
+
 1. On meeting join: read `participant_roster` document from storage (populated by Bot on join)
    If any participant has `is_high_value: true` → activate High-Value Participant Mode
-2. Every 60 seconds: analyze last 60 seconds of transcript for Tone_Issues
+2. Every 60 seconds: analyze last 60 seconds of transcript TEXT for Tone_Issues
    (aggressive language, dismissive language, interruptions, profanity, disrespectful tone)
 3. Classify severity: "Minor" | "Moderate" | "Severe"
 4. If High-Value Participant Mode active: treat "Minor" as "Moderate"
@@ -463,10 +835,9 @@ Classification:
 - Calculate speaking time percentage and turn count per participant
 - Flag low participation (<2%) and dominant speakers (>50%)
 - Stage 2: Compute participation snapshot every 5 minutes: active speakers, silent participants, speaking time distribution
-- Stage 2: Calculate overall meeting energy level (High/Medium/Low) from aggregate engagement signals
+- Stage 2: Calculate overall meeting energy level (High/Medium/Low) from aggregate text-based engagement signals (speaking frequency, turn count, turn length) — no audio signals available in Stage 2
 - Stage 2: Detect participants silent for >10 consecutive minutes; notify Orchestrator for private organizer alert
-- Stage 2: Detect significant pitch/tone shifts in real time; log with participant identity and timestamp (no meeting-wide alerts)
-- Stage 3: Incorporate prosody signals (speaking rate, pitch mean/variance) as raw numeric values in the report — these are not classified into custom labels
+- Stage 3: Incorporate prosody signals (speaking rate, pitch mean/variance) from post-meeting batch audio processing as raw numeric values in the report — these are not classified into custom labels and are only available when `recording_enabled: true`
 
 **Model usage:**
 - Azure AI Language Sentiment Analysis API — text sentiment (Positive/Neutral/Negative)
@@ -494,7 +865,9 @@ Classification:
   "consent_status": {
     "{participant_id}": {
       "consented": "boolean",
-      "timestamp": "ISO8601"
+      "timestamp": "ISO8601",
+      "late_joiner": "boolean",
+      "join_time": "ISO8601"
     }
   },
   "stage": "joining | transcribing | analyzing | complete | aborted",
@@ -505,6 +878,7 @@ Classification:
   "updated_at": "ISO8601",
   "azure_region": "string",
   "retention_expires_at": "ISO8601",
+  "recording_enabled": "boolean",
   "high_value_participant_mode": "boolean",
   "high_value_participants": ["participant_id"],
   "meeting_purpose": "Decision meeting | Status update | Brainstorming | Client presentation | Problem-solving | null",
@@ -767,10 +1141,10 @@ Bot → Azure Bot Service: System-assigned managed identity
 
 ```mermaid
 flowchart TD
-    A[Bot joins meeting] --> B[Send consent card to all participants]
+    A[Bot joins meeting] --> B[Send consent card to all current participants]
     B --> C{Consent card delivered?}
     C -- No --> D[Log failure, abort transcription]
-    C -- Yes --> E[Wait for responses]
+    C -- Yes --> E[Wait for responses — 2min timeout]
     E --> F{Participant response}
     F -- Granted --> G[Add to consented set]
     F -- Declined --> H[Add to excluded set]
@@ -780,6 +1154,16 @@ flowchart TD
     I --> K
     J --> L[Store consent record in Cosmos DB]
     K --> L
+
+    M[Participant joins mid-meeting] --> N{participant_id in consent_status?}
+    N -- Yes --> O[Already consented or declined — no action]
+    N -- No --> P[Send targeted consent card to late joiner only]
+    P --> Q[Store consent record as pending]
+    Q --> R{Late joiner response — 2min timeout}
+    R -- Granted --> S[Add to consented set, capture segments from this point forward]
+    R -- Declined or no response --> T[Add to excluded set, omit all utterances]
+    S --> U[Update consent record in Cosmos DB]
+    T --> U
 ```
 
 Consent revocation: If a participant revokes consent post-meeting, the system deletes their transcript segments from Blob Storage and Cosmos DB, re-runs analysis without their data, and updates the stored report — all within 48 hours.
@@ -799,7 +1183,7 @@ Consent revocation: If a participant revokes consent post-meeting, the system de
 
 ### Property 2: Consent exclusion is total
 
-*For any* meeting transcript and any participant who declined consent, zero transcript segments attributed to that participant should appear in the stored transcript, the analysis report, or any downstream output. This holds regardless of when during the meeting the participant declined.
+*For any* meeting transcript and any participant who declined consent, zero transcript segments attributed to that participant should appear in the stored transcript, the analysis report, or any downstream output. This holds regardless of when during the meeting the participant declined or joined. For late joiners who declined or did not respond within the 2-minute window, no segments captured after their join time should appear.
 
 **Validates: Requirements 2.3, 3.5**
 
@@ -947,6 +1331,18 @@ Consent revocation: If a participant revokes consent post-meeting, the system de
 
 **Validates: Requirements 15.1, 15.3**
 
+### Property 27: Late joiner consent card delivery
+
+*For any* participant who joins a meeting after the initial consent card has been sent, and whose `participant_id` is not present in the meeting record's `consent_status` map at the time of their join event, the bot must send a targeted consent card to that participant within 60 seconds of the join event. No transcript segments attributed to that participant may be stored before their consent decision is recorded. If no response is received within 2 minutes of the consent card being sent, the participant's status must be set to declined.
+
+**Validates: Requirements 2.1, 2.3, 2.5**
+
+### Property 28: Tone monitoring uses transcript text only in Stages 1 and 2
+
+*For any* Tone_Issue detected and logged during a live meeting in Stage 1 or Stage 2, the detection must be derived solely from transcript text segments. No audio stream, prosody feature, or Speech Service signal may contribute to a real-time Tone_Issue classification during the live meeting. Audio-derived tone signals may only appear in the post-meeting Analysis_Report when Stage 3 batch processing is complete.
+
+**Validates: Requirements 16.3, 16.4 (text-only constraint), 3.8 (Stage 3 batch only)**
+
 ---
 
 ## Error Handling
@@ -957,7 +1353,8 @@ Consent revocation: If a participant revokes consent post-meeting, the system de
 |---|---|---|
 | Specialist agent timeout (>120s) | Orchestrator timeout | Retry once; mark section "Unavailable" on second failure |
 | Bot fails to auto-join meeting | Join attempt timeout (60s) | Log failure with meeting ID + reason code; notify organizer |
-| Consent card delivery failure | Bot Framework activity error | Abort transcription; log failure |
+| Consent card delivery failure (initial) | Bot Framework activity error | Abort transcription; log failure |
+| Consent card delivery failure (late joiner) | Bot Framework activity error | Treat late joiner as declined; log failure with participant ID and meeting ID; exclude all utterances |
 | Transcription connection interrupted | Graph API disconnect event | Reconnect within 10s; log gap with start/end timestamps |
 | MCP tool call failure | HTTP error / timeout | Return structured error with `retryable` flag; agent decides retry |
 | Audio post-processing failure | Speech Service error | Log failure; mark participant audio analysis as "Unavailable" |
@@ -974,6 +1371,8 @@ Consent revocation: If a participant revokes consent post-meeting, the system de
 | `VALIDATION_ERROR` | Input parameters failed schema validation | false |
 | `CONSENT_REQUIRED` | Operation blocked — participant consent not granted | false |
 | `REGION_VIOLATION` | Cross-region data write attempted | false |
+| `FEATURE_NOT_ENABLED` | Tool called before its stage is active | false |
+| `LATE_JOINER_CONSENT_FAILED` | Consent card delivery to late joiner failed | false |
 
 ### Retry Policy
 
@@ -1026,22 +1425,30 @@ def test_time_allocation_sums_to_100(raw_durations):
 
 ### Unit Test Focus Areas
 
-- Bot Framework activity handler routing (meeting start, end, consent response events)
-- Consent card rendering — correct Adaptive Card JSON structure
-- MCP server tool input validation — schema rejection for each tool
-- MCP server error response format — all required fields present
+- Bot Framework activity handler routing (meeting start, end, consent response events, `participantJoined` late joiner event)
+- Consent card rendering — correct Adaptive Card JSON structure for both initial broadcast and targeted late joiner card
+- Late joiner consent logic — participant already in `consent_status` map is not re-sent a card; new participant not in map always receives card
+- Late joiner 2-minute timeout — non-response correctly recorded as declined, utterances excluded
+- MCP server tool input validation — schema rejection for each of the typed `store_*` tools independently
+- MCP server `FEATURE_NOT_ENABLED` response — Stage 2/3 tools return correct error when called in Stage 1
+- MCP server `compute_similarity` — score range [0.0, 1.0], correct max_score returned, empty agenda_topics edge case
+- MCP server error response format — all required fields present (`error.code`, `error.message`, `error.retryable`)
 - Agenda extraction from calendar event body (various formats)
 - Action item schema validation — all required fields present
 - Cost calculation with missing participant rates
 - Poll majority rule edge cases (tie, all abstain, single participant)
 - Consent revocation — deletion confirmation
+- Recording status check — `recording_enabled: false` triggers private organizer alert
 
 ### Integration Test Focus Areas
 
 - End-to-end meeting lifecycle with mock Graph API and mock Azure OpenAI
+- Late joiner full flow — join event → consent card sent → grant/decline → transcript inclusion/exclusion verified in Blob and Cosmos
 - A2A task dispatch and response handling between Orchestrator and specialist agents
-- Blob Storage write/read round-trip for transcript segments
-- Cosmos DB write/read round-trip for analysis reports and consent records
+- `compute_similarity` MCP tool — embedding cache hit on second call for same `meeting_id`, cache miss on new meeting
+- Blob Storage write/read round-trip for transcript segments via `store_transcript_segment`
+- Cosmos DB write/read round-trip for analysis reports via `store_analysis_report` and `get_analysis_report`
+- Typed `store_*` tool schema enforcement — wrong document type sent to wrong tool returns `VALIDATION_ERROR`, not a silent write
 
 ---
 
@@ -1053,12 +1460,14 @@ def test_time_allocation_sums_to_100(raw_durations):
 - Azure AD app registration with minimum required Graph API permissions
 - Bot Framework SDK application with Teams App Manifest
 - Graph calendar webhook subscription for auto-join
-- Consent Adaptive Card delivery and consent record storage
+- Consent Adaptive Card delivery to all participants on join; re-consent flow for late joiners (targeted card on `participantJoined` event, 2-minute timeout, treat non-response as declined)
+- Recording status check on join; private organizer alert if recording not enabled
+- Consent record storage (granted / declined / pending) per participant per meeting
 - Transcription Agent: Graph Communications API transcript capture, speaker attribution, Blob Storage persistence
-- Analysis Agent: agenda extraction (calendar + inference), agenda adherence scoring (in-memory embeddings), time allocation, action item extraction
+- Analysis Agent: agenda extraction (calendar + inference), agenda adherence scoring (via `compute_similarity` MCP tool), time allocation, action item extraction
 - Sentiment Agent: speaking time percentage, turn count, participation flags
 - Orchestrator Agent: meeting lifecycle management, A2A dispatch, report compilation
-- MCP Server (FastAPI): 6 core tools (`get_transcript`, `get_calendar_event`, `get_participants`, `post_adaptive_card`, `store_analysis`, `get_analysis`)
+- MCP Server (FastAPI): full tool set deployed from day one with stage feature flags — core tools active: `get_calendar_event`, `get_recording_status`, `post_adaptive_card`, `store_meeting_record`, `store_transcript_segment`, `store_consent_record`, `store_analysis_report`, `get_analysis_report`, `compute_similarity`
 - Post-meeting Adaptive Card report delivery
 - Cosmos DB + Blob Storage setup with data residency enforcement
 - Azure Monitor logging for A2A dispatches and failures
@@ -1072,37 +1481,39 @@ def test_time_allocation_sums_to_100(raw_durations):
 ### Stage 2 — Real-Time Intelligence (Weeks 3–4)
 
 **What gets built:**
-- Orchestrator real-time evaluation loop (60-second polling against live transcript)
-- Agenda clarity detection (5-minute and 10-minute alert triggers)
+- Orchestrator real-time evaluation loop (60-second polling against live transcript text)
+- Agenda clarity detection (5-minute and 10-minute alert triggers) using `compute_similarity` MCP tool
 - Off-track detection (3-consecutive-minute deviation trigger)
-- Alert throttling (max 1 alert per type per 5-minute window)
+- Alert throttling (max 1 alert per type per 5-minute window) — throttle state stored in meeting record in Cosmos DB
+- Professional tone monitoring — text-based only using GPT-4o on transcript segments; no audio or prosody signals during live meeting
 - Real-time Meeting Cost Tracker Adaptive Card (in-place update every 60 seconds)
-- MCP Server extended with 2 tools: `send_realtime_alert`, `get_participant_rates`
+- MCP Server: activate Stage 2 tools — `send_realtime_alert`, `get_participant_rates`, `store_cost_snapshot`
 - Participant rate data store in Cosmos DB `config` container
 - Final meeting cost included in Analysis Report
 
 **Dependencies:** Stage 1 complete. Participant rate data populated in Cosmos DB.
 
-**Stage 2 demo:** During a live meeting, the bot sends an agenda clarity alert at the 5-minute mark, detects an off-topic discussion and sends a refocus alert, and displays a live cost tracker card that updates every minute showing total cost and per-participant breakdown.
+**Stage 2 demo:** During a live meeting, the bot sends an agenda clarity alert at the 5-minute mark, detects an off-topic discussion and sends a refocus alert, displays a live cost tracker card that updates every minute, and sends a private organizer alert when unprofessional language is detected in the transcript.
 
 ---
 
 ### Stage 3 — Deep Analysis (Weeks 5–6)
 
 **What gets built:**
-- Azure AI Speech Service integration for real-time prosody analysis during meetings
-- Tone and pitch feature extraction and Blob Storage persistence alongside transcript segments
-- Audio post-processing pipeline triggered on meeting end (batch Speech API)
-- Sentiment Agent extended: combined text + audio engagement score, tone classification
+- Audio post-processing pipeline triggered on meeting end (Azure AI Speech batch API) — no real-time audio processing during the meeting
+- Prosody feature extraction (speaking rate, pitch mean/variance) per participant from the full recording file; requires `recording_enabled: true` in meeting record
+- Timestamp calibration step: anchor Graph transcript segment timestamps against audio recording timeline to align prosody data with transcript segments correctly
+- Blob Storage persistence of tone and pitch features alongside finalized transcript
+- Sentiment Agent extended: combined text + audio engagement score using prosody signals where available; graceful fallback to text-only when `recording_enabled: false`
 - Analysis Agent extended: participant agreement detection on action items, participant relevance assessment
 - Consent poll delivery via `create_poll` MCP tool (Adaptive Card poll)
 - Poll response collection and 24-hour close timer
 - Analysis Report update with poll results and "Disputed by Poll" reclassification
-- MCP Server extended with 1 tool: `create_poll`
+- MCP Server: activate Stage 3 tool — `create_poll`
 
-**Dependencies:** Stage 2 complete. Azure AI Speech Service deployment with prosody analysis enabled.
+**Dependencies:** Stage 2 complete. Azure AI Speech Service deployment with prosody analysis enabled. Meeting recording must be enabled by the organizer for audio features to be available.
 
-**Stage 3 demo:** Post-meeting report includes per-participant sentiment classification, tone labels, engagement scores, agreement status on each action item with supporting transcript excerpts, and participant relevance ratings. A consent poll is sent to all participants and the report is updated when the poll closes.
+**Stage 3 demo:** Post-meeting report includes per-participant sentiment classification, prosody-enriched tone labels, engagement scores, agreement status on each action item with supporting transcript excerpts, and participant relevance ratings. Where recording was not enabled, the report clearly indicates audio analysis is unavailable rather than marking sections as "Unavailable" without explanation. A consent poll is sent to all participants and the report is updated when the poll closes.
 
 ---
 

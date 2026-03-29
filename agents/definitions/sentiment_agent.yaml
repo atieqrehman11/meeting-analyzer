@@ -1,0 +1,13 @@
+name: sentiment-agent
+description: Post-meeting sentiment, participation scoring, prosody enrichment
+model: gpt-4o-meeting-bot
+temperature: 0.1
+max_tokens: 3000
+instructions_file: agents/instructions/sentiment_agent_v1.md
+tools:
+  - mcp: meeting-bot-mcp-server
+    tools_filter:
+      - get_analysis_report
+      - store_analysis_report
+      - compute_similarity
+response_format: json_object
