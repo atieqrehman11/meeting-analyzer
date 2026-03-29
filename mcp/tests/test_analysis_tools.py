@@ -1,5 +1,5 @@
 """Tests for store_analysis_report and get_analysis_report."""
-from tests.conftest import analysis_report
+from .conftest import analysis_report
 
 
 def test_store_and_retrieve_report(client):

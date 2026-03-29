@@ -1,5 +1,5 @@
 """Tests for store_consent_record — round-trip persistence (Property 3)."""
-from tests.conftest import consent_record
+from .conftest import consent_record
 
 
 def test_store_consent_granted(client):

@@ -1,1 +1,1 @@
-# tests package
+# mcp tests package

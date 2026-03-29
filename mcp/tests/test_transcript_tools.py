@@ -1,5 +1,5 @@
 """Tests for store_transcript_segment — including consent enforcement (Property 2)."""
-from tests.conftest import transcript_segment
+from .conftest import transcript_segment
 
 
 def test_store_segment_with_consent_succeeds(client):

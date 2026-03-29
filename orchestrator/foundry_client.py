@@ -4,13 +4,11 @@ Foundry A2A dispatch — wraps AIProjectClient for agent-to-agent communication.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import logging
 import sys
 from pathlib import Path
-
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
 
 from config import OrchestratorConfig
 
@@ -24,6 +22,15 @@ _AGENT_IDS_FILE = Path(__file__).parent / "agent_ids.json"
 
 def build_foundry_client(config: OrchestratorConfig) -> "FoundryClient":
     """Construct a FoundryClient from the given config."""
+    try:
+        AIProjectClient = importlib.import_module("azure.ai.projects").AIProjectClient
+        DefaultAzureCredential = importlib.import_module("azure.identity").DefaultAzureCredential
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            "Azure SDK packages are required to build the Foundry client. "
+            "Install 'azure-ai-projects' and 'azure-identity'."
+        ) from exc
+
     ai_client = AIProjectClient(
         endpoint=config.azure_ai_project_endpoint,
         credential=DefaultAzureCredential(),

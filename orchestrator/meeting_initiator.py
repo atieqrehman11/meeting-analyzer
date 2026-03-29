@@ -80,6 +80,7 @@ def _build_meeting_record(
         subject=calendar.subject,
         start_time=calendar.start_time,
         participants=participants,
+        stage="transcribing",
         created_at=now,
         updated_at=now,
         azure_region=os.environ.get("AZURE_REGION", "eastus"),

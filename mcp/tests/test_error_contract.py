@@ -16,7 +16,7 @@ def _assert_error_envelope(body: dict) -> None:
 
 def test_consent_required_error_envelope(client):
     """CONSENT_REQUIRED error must conform to the MCP error contract."""
-    from tests.conftest import transcript_segment
+    from .conftest import transcript_segment
     r = client.post("/v1/tools/transcript/store_transcript_segment",
                     json=transcript_segment(consent_verified=False))
     assert r.status_code == 400
@@ -50,7 +50,7 @@ def test_invalid_input_rejected_before_tool_executes(client):
 
 def test_invalid_consent_decision_rejected(client):
     """Property 21: invalid enum value in consent record must be rejected."""
-    from tests.conftest import consent_record
+    from .conftest import consent_record
     payload = consent_record()
     payload["consent_record"]["decision"] = "not_a_valid_decision"
     r = client.post("/v1/tools/consent/store_consent_record", json=payload)

@@ -14,6 +14,8 @@ VENV_DIR="$REPO_ROOT/.venv"
 # Load .env if present (local dev only — never used in CI/CD or Azure)
 # ---------------------------------------------------------------------------
 load_env() {
+    clear
+    echo "Loading .env ..."
     if [ -f "$REPO_ROOT/.env" ]; then
         # Export each non-comment, non-empty line
         set -o allexport
@@ -71,7 +73,7 @@ install_deps() {
 setup_mcp() {
     activate_venv
     install_deps "$MCP_DIR/requirements.txt"
-    export PYTHONPATH="$REPO_ROOT"
+    export PYTHONPATH="$MCP_DIR:$REPO_ROOT/orchestrator:$REPO_ROOT"
 }
 
 cleanup() {

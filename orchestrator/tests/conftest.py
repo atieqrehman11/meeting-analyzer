@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "mcp"))
+sys.path.insert(0, os.path.join(REPO_ROOT, "orchestrator"))
 
 from main import app as mcp_app  # noqa: E402 — mcp_server/main.py
 from mcp_client import McpClient  # noqa: E402

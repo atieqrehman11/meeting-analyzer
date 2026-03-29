@@ -1,5 +1,5 @@
 """Tests for stage gating — FEATURE_NOT_ENABLED for Stage 2/3 tools when active_stage=1."""
-from tests.conftest import cost_snapshot
+from .conftest import cost_snapshot
 
 
 # ---------------------------------------------------------------------------

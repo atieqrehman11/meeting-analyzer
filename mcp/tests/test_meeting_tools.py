@@ -1,6 +1,6 @@
 """Tests for Stage 1 meeting tools: get_calendar_event, get_recording_status,
 store_meeting_record, post_adaptive_card."""
-from tests.conftest import meeting_record
+from .conftest import meeting_record
 
 
 def test_get_calendar_event_returns_mock_data(client):

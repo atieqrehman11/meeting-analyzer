@@ -11,7 +11,7 @@ def _calendar(agenda: list[str] | None = None) -> CalendarEventOutput:
     return CalendarEventOutput(
         meeting_id="mtg-001",
         subject="Q1 Review",
-        agenda=agenda or ["Budget", "Timeline"],
+        agenda=["Budget", "Timeline"] if agenda is None else agenda,
         start_time="2026-01-01T10:00:00+00:00",
         end_time="2026-01-01T11:00:00+00:00",
         organizer_id="org-1",
