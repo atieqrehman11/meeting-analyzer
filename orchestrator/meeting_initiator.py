@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mcp_client import McpClient, McpCallError
+from shared_models.mcp_client import BaseMcpClient, McpCallError
 from shared_models.mcp_types import CalendarEventOutput, MeetingRecord
 
 logger = logging.getLogger("orchestrator.meeting_initiator")
@@ -28,7 +28,7 @@ class MeetingInitiator:
     Injected with McpClient — fully testable via mocks.
     """
 
-    def __init__(self, mcp: McpClient) -> None:
+    def __init__(self, mcp: BaseMcpClient) -> None:
         self._mcp = mcp
 
     async def initialise(

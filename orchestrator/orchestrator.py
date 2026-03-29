@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import OrchestratorConfig
 from foundry_client import FoundryClient, build_foundry_client, load_agent_ids
-from mcp_client import McpClient
+from shared_models.mcp_client import BaseMcpClient
 from meeting_initiator import MeetingInitiator
 from post_meeting_analyzer import PostMeetingAnalyzer
 from shared_models.a2a_schemas import CaptureTranscriptSegmentTask
@@ -30,7 +30,7 @@ class Orchestrator:
     One instance per active meeting — created by the Bot on meeting_start.
     """
 
-    def __init__(self, config: OrchestratorConfig, mcp: McpClient) -> None:
+    def __init__(self, config: OrchestratorConfig, mcp: BaseMcpClient) -> None:
         self._cfg = config
         self._mcp = mcp
         self._foundry: FoundryClient = build_foundry_client(config)

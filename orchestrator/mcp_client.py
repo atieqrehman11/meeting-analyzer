@@ -11,6 +11,7 @@ from typing import Optional
 
 import httpx
 
+from shared_models.mcp_client import BaseMcpClient, McpCallError
 from shared_models.mcp_types import (
     CalendarEventOutput,
     GetRecordingStatusOutput,
@@ -27,34 +28,12 @@ from shared_models.mcp_types import (
 logger = logging.getLogger("orchestrator.mcp_client")
 
 
-class McpCallError(Exception):
-    """Raised when an MCP tool call fails after all retries."""
-    def __init__(self, code: str, message: str, retryable: bool) -> None:
-        self.code = code
-        self.message = message
-        self.retryable = retryable
-        super().__init__(f"[{code}] {message}")
-
-
-class McpClient:
+class McpClient(BaseMcpClient):
     """
     Async client for all MCP server tools.
     Base URL is read from config at construction time.
     Retries retryable errors up to max_retries times with exponential backoff.
     """
-
-    BASE = "/v1/tools"
-
-    def __init__(
-        self,
-        base_url: str,
-        max_retries: int = 3,
-        backoff: tuple[float, ...] = (1.0, 2.0, 4.0),
-        timeout: float = 30.0,
-    ) -> None:
-        self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout)
-        self._max_retries = max_retries
-        self._backoff = backoff
 
     async def aclose(self) -> None:
         await self._http.aclose()

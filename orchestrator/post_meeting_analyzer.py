@@ -12,7 +12,7 @@ import asyncio
 import logging
 
 from foundry_client import FoundryClient
-from mcp_client import McpClient, McpCallError
+from shared_models.mcp_client import BaseMcpClient, McpCallError
 from report_builder import build_report_card, compile_report
 from shared_models.a2a_schemas import (
     AnalyzeMeetingResponse,
@@ -36,7 +36,7 @@ class PostMeetingAnalyzer:
     def __init__(
         self,
         foundry: FoundryClient,
-        mcp: McpClient,
+        mcp: BaseMcpClient,
         agent_ids: dict[str, str],
         timeout_seconds: float,
     ) -> None:

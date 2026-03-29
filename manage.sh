@@ -8,6 +8,7 @@ cd "$(dirname "$0")"
 
 REPO_ROOT="$(pwd)"
 MCP_DIR="$REPO_ROOT/mcp"
+TEAM_BOT_DIR="$REPO_ROOT/team_bot"
 VENV_DIR="$REPO_ROOT/.venv"
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,56 @@ setup_mcp() {
     export PYTHONPATH="$MCP_DIR:$REPO_ROOT/orchestrator:$REPO_ROOT"
 }
 
+setup_team_bot() {
+    activate_venv
+    install_deps "$TEAM_BOT_DIR/requirements.txt"
+    export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/orchestrator:$REPO_ROOT/team_bot"
+}
+
+run_pytest_module() {
+    local summary_file=$1
+    local module_name=$2
+    local test_path=$3
+    shift 3
+    local tmp_output
+    tmp_output=$(mktemp)
+
+    echo "Running ${module_name} tests..."
+    if python3 -m pytest "$test_path" "$@" -v 2>&1 | tee "$tmp_output"; then
+        local status=0
+    else
+        local status=$?
+    fi
+
+    local summary
+    summary=$(python3 - "$tmp_output" <<'PY'
+import re
+import sys
+from collections import Counter
+text = open(sys.argv[1], 'r', encoding='utf-8').read()
+counts = Counter()
+for m in re.finditer(r'(\d+)\s+(passed|failed|error|errors|skipped|xfailed|xpassed)', text):
+    count = int(m.group(1))
+    tag = m.group(2)
+    if tag == 'error':
+        tag = 'errors'
+    counts[tag] += count
+order = ['failed', 'errors', 'passed', 'skipped', 'xfailed', 'xpassed']
+parts = [f'{counts[k]} {k}' for k in order if counts[k]]
+print(', '.join(parts))
+PY
+)
+
+    if [ -n "$summary" ]; then
+        printf '%s: %s\n' "$module_name" "$summary" > "$summary_file"
+    else
+        printf '%s: no summary available\n' "$module_name" > "$summary_file"
+    fi
+
+    rm -f "$tmp_output"
+    return "$status"
+}
+
 cleanup() {
     [ -n "${MCP_PID:-}" ] && kill "$MCP_PID" 2>/dev/null || true
 }
@@ -109,22 +160,72 @@ case "${1:-help}" in
     test:mcp)
         load_env
         setup_mcp
-        echo "Running MCP server tests..."
-        python3 -m pytest "$MCP_DIR/tests" "${@:2}" -v
+        tmp_summary=$(mktemp)
+        run_pytest_module "$tmp_summary" "MCP" "$MCP_DIR/tests" "${@:2}"
+        status=$?
+        cat "$tmp_summary"
+        rm -f "$tmp_summary"
+        exit "$status"
         ;;
 
     test:orchestrator)
         load_env
         setup_mcp
-        echo "Running orchestrator tests..."
-        python3 -m pytest "$REPO_ROOT/orchestrator/tests" "${@:2}" -v
+        tmp_summary=$(mktemp)
+        run_pytest_module "$tmp_summary" "Orchestrator" "$REPO_ROOT/orchestrator/tests" "${@:2}"
+        status=$?
+        cat "$tmp_summary"
+        rm -f "$tmp_summary"
+        exit "$status"
+        ;;
+
+    test:team-bot)
+        load_env
+        setup_team_bot
+        tmp_summary=$(mktemp)
+        run_pytest_module "$tmp_summary" "Team Bot" "$REPO_ROOT/team_bot/tests" "${@:2}"
+        status=$?
+        cat "$tmp_summary"
+        rm -f "$tmp_summary"
+        exit "$status"
         ;;
 
     test)
         load_env
         setup_mcp
+        setup_team_bot
         echo "Running all tests..."
-        python3 -m pytest "$MCP_DIR/tests" "$REPO_ROOT/orchestrator/tests" "${@:2}" -v
+        set +e
+        overall_status=0
+        summaries=()
+
+        tmp_summary=$(mktemp)
+        run_pytest_module "$tmp_summary" "MCP" "$MCP_DIR/tests" "${@:2}"
+        status=$?
+        summaries+=("$(cat "$tmp_summary")")
+        rm -f "$tmp_summary"
+        [ "$status" -ne 0 ] && overall_status=1
+
+        tmp_summary=$(mktemp)
+        run_pytest_module "$tmp_summary" "Orchestrator" "$REPO_ROOT/orchestrator/tests" "${@:2}"
+        status=$?
+        summaries+=("$(cat "$tmp_summary")")
+        rm -f "$tmp_summary"
+        [ "$status" -ne 0 ] && overall_status=1
+
+        tmp_summary=$(mktemp)
+        run_pytest_module "$tmp_summary" "Team Bot" "$REPO_ROOT/team_bot/tests" "${@:2}"
+        status=$?
+        summaries+=("$(cat "$tmp_summary")")
+        rm -f "$tmp_summary"
+        [ "$status" -ne 0 ] && overall_status=1
+
+        echo "\nSummary:"
+        for s in "${summaries[@]}"; do
+            echo "$s"
+        done
+        set -e
+        exit "$overall_status"
         ;;
 
     deploy:agents)
@@ -142,8 +243,9 @@ case "${1:-help}" in
         ;;
 
     install)
-        activate_venv
-        install_deps "$MCP_DIR/requirements.txt"
+        load_env
+        setup_mcp
+        setup_team_bot
         echo "All dependencies installed."
         ;;
 
@@ -162,6 +264,9 @@ case "${1:-help}" in
         echo ""
         echo "  mcp            Start the MCP server (loads .env)"
         echo "  test:mcp       Run MCP server tests"
+        echo "  test:orchestrator  Run orchestrator tests"
+        echo "  test:team-bot  Run team bot tests"
+        echo "  test           Run all tests"
         echo "  deploy:agents  Register/update agents in Azure AI Foundry"
         echo "  check:mcp      Verify MCP server URL is reachable"
         echo "  install        Install all dependencies into .venv"

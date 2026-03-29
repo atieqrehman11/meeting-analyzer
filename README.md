@@ -32,12 +32,13 @@ A modular meeting analysis project built around a FastAPI-based MCP server, an o
   - `register_mcp.py` verifies the MCP server URL and confirms service reachability before deployment.
 
 - `team_bot/`
-  - Reserved for future team bot / meeting bot integration work.
+  - Python Teams Bot Framework service. Handles Teams activity events, lifecycle orchestration, consent cards, and delegates work to the orchestrator and MCP server.
 
 ## Key Files
 
 - `manage.sh`
   - Shell utility script for repository operations and developer tooling.
+  - Supports targeted test runs and a grouped summary output for all modules.
 
 - `mcp/main.py`
   - FastAPI application entrypoint for the MCP server.
@@ -55,6 +56,29 @@ A modular meeting analysis project built around a FastAPI-based MCP server, an o
 3. It dispatches those tasks to specialist agents configured in `agents/`.
 4. The `mcp/` service provides the API surface and backend support for data storage, similarity search, and transcript handling.
 5. `deploy/` scripts prepare the MCP endpoint and agent registrations for deployment.
+
+## Developer workflow
+
+Use `manage.sh` for local operations.
+
+- `./manage.sh install`
+  - Installs required dependencies for `mcp/` and `team_bot/`.
+
+- `./manage.sh test:mcp`
+  - Runs only MCP server tests.
+
+- `./manage.sh test:orchestrator`
+  - Runs only orchestrator tests.
+
+- `./manage.sh test:team-bot`
+  - Runs only team bot tests.
+
+- `./manage.sh test`
+  - Runs all test suites and prints grouped module summaries at the end.
+  - Output format is like:
+    - `MCP: 10 failed, 2 passed`
+    - `Orchestrator: 20 passed, 1 failed`
+    - `Team Bot: 4 passed`
 
 ## Notes
 
