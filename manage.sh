@@ -8,6 +8,7 @@ cd "$(dirname "$0")"
 
 REPO_ROOT="$(pwd)"
 MCP_DIR="$REPO_ROOT/mcp"
+ORCHESTRATOR_DIR="$REPO_ROOT/orchestrator"
 TEAM_BOT_DIR="$REPO_ROOT/team_bot"
 VENV_DIR="$REPO_ROOT/.venv"
 
@@ -74,13 +75,19 @@ install_deps() {
 setup_mcp() {
     activate_venv
     install_deps "$MCP_DIR/requirements.txt"
-    export PYTHONPATH="$MCP_DIR:$REPO_ROOT/orchestrator:$REPO_ROOT"
+    export PYTHONPATH="$MCP_DIR:$REPO_ROOT"
+}
+
+setup_orchestrator() {
+    activate_venv
+    install_deps "$ORCHESTRATOR_DIR/requirements.txt"
+    export PYTHONPATH="$REPO_ROOT:$ORCHESTRATOR_DIR"
 }
 
 setup_team_bot() {
     activate_venv
     install_deps "$TEAM_BOT_DIR/requirements.txt"
-    export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/orchestrator:$REPO_ROOT/team_bot"
+    export PYTHONPATH="$REPO_ROOT:$TEAM_BOT_DIR"
 }
 
 run_pytest_module() {
@@ -129,6 +136,7 @@ PY
 
 cleanup() {
     [ -n "${MCP_PID:-}" ] && kill "$MCP_PID" 2>/dev/null || true
+    [ -n "${BOT_PID:-}" ] && kill "$BOT_PID" 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM
@@ -139,7 +147,7 @@ trap cleanup EXIT INT TERM
 
 case "${1:-help}" in
 
-    mcp)
+    mcp|start:mcp)
         load_env
         setup_mcp
         ensure_port_free "${MCP_PORT:-8000}"
@@ -157,6 +165,53 @@ case "${1:-help}" in
         wait
         ;;
 
+    bot|start:bot)
+        load_env
+        setup_team_bot
+        ensure_port_free "${BOT_PORT:-3978}"
+        echo ""
+        echo "Starting Team Bot service ..."
+        echo "  API : http://localhost:${BOT_PORT:-3978}"
+        echo ""
+        echo "Press Ctrl+C to stop."
+        echo ""
+        reload_arg=""
+        if [ "${BOT_RELOAD:-false}" = "true" ] || [ "${BOT_RELOAD:-1}" = "true" ]; then
+            reload_arg="--reload"
+        fi
+        python3 -m uvicorn "team_bot.main:app" --host "${BOT_HOST:-0.0.0.0}" --port "${BOT_PORT:-3978}" $reload_arg &
+        BOT_PID=$!
+        wait
+        ;;
+
+    orchestrator)
+        load_env
+        echo "Orchestrator is a library component, not a standalone server."
+        echo "Use './manage.sh bot' to launch the Teams bot, which uses the orchestrator internally."
+        echo "Use './manage.sh test:orchestrator' to run orchestrator tests."
+        ;;
+
+    all|start:all)
+        load_env
+        setup_mcp
+        setup_orchestrator
+        setup_team_bot
+        ensure_port_free "${MCP_PORT:-8000}"
+        ensure_port_free "${BOT_PORT:-3978}"
+        echo ""
+        echo "Starting all services ..."
+        echo "  MCP API : http://localhost:${MCP_PORT:-8000}"
+        echo "  Bot API : http://localhost:${BOT_PORT:-3978}"
+        echo ""
+        echo "Press Ctrl+C to stop."
+        echo ""
+        python3 "$MCP_DIR/main.py" &
+        MCP_PID=$!
+        python3 -m uvicorn "team_bot.main:app" --host "${BOT_HOST:-0.0.0.0}" --port "${BOT_PORT:-3978}" &
+        BOT_PID=$!
+        wait
+        ;;
+
     test:mcp)
         load_env
         setup_mcp
@@ -170,7 +225,7 @@ case "${1:-help}" in
 
     test:orchestrator)
         load_env
-        setup_mcp
+        setup_orchestrator
         tmp_summary=$(mktemp)
         run_pytest_module "$tmp_summary" "Orchestrator" "$REPO_ROOT/orchestrator/tests" "${@:2}"
         status=$?
@@ -190,9 +245,10 @@ case "${1:-help}" in
         exit "$status"
         ;;
 
-    test)
+    test|test:all)
         load_env
         setup_mcp
+        setup_orchestrator
         setup_team_bot
         echo "Running all tests..."
         set +e
@@ -245,6 +301,7 @@ case "${1:-help}" in
     install)
         load_env
         setup_mcp
+        setup_orchestrator
         setup_team_bot
         echo "All dependencies installed."
         ;;
@@ -262,19 +319,24 @@ case "${1:-help}" in
         echo ""
         echo "Usage: ./manage.sh <command>"
         echo ""
-        echo "  mcp            Start the MCP server (loads .env)"
-        echo "  test:mcp       Run MCP server tests"
+        echo "  mcp|start:mcp   Start the MCP server (loads .env)"
+        echo "  bot|start:bot   Start the Teams bot service"
+        echo "  orchestrator    Show orchestrator status / usage guidance"
+        echo "  all|start:all   Start MCP and bot together on different ports"
+        echo "  test:mcp        Run MCP server tests"
         echo "  test:orchestrator  Run orchestrator tests"
-        echo "  test:team-bot  Run team bot tests"
+        echo "  test:team-bot   Run team bot tests"
         echo "  test           Run all tests"
-        echo "  deploy:agents  Register/update agents in Azure AI Foundry"
-        echo "  check:mcp      Verify MCP server URL is reachable"
-        echo "  install        Install all dependencies into .venv"
-        echo "  env:init       Create .env from .env.example"
-        echo "  help           Show this message"
+        echo "  test:all       Run all tests"
+        echo "  deploy:agents   Register/update agents in Azure AI Foundry"
+        echo "  check:mcp       Verify MCP server URL is reachable"
+        echo "  install         Install all dependencies into .venv"
+        echo "  env:init        Create .env from .env.example"
+        echo "  help            Show this message"
         echo ""
         echo "Quick start:"
         echo "  ./manage.sh env:init   # create .env"
+        echo "  ./manage.sh all        # start MCP and bot on separate ports"
         echo "  ./manage.sh mcp        # start MCP server on :8000"
         echo ""
         echo "Key env vars (set in .env or shell):"

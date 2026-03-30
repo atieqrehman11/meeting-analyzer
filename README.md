@@ -32,7 +32,8 @@ A modular meeting analysis project built around a FastAPI-based MCP server, an o
   - `register_mcp.py` verifies the MCP server URL and confirms service reachability before deployment.
 
 - `team_bot/`
-  - Python Teams Bot Framework service. Handles Teams activity events, lifecycle orchestration, consent cards, and delegates work to the orchestrator and MCP server.
+  - Python Teams Bot Framework service.
+  - Handles Teams activity events, lifecycle orchestration, consent cards, and delegates work to the orchestrator and MCP server.
 
 ## Key Files
 
@@ -61,8 +62,23 @@ A modular meeting analysis project built around a FastAPI-based MCP server, an o
 
 Use `manage.sh` for local operations.
 
+- `./manage.sh env:init`
+  - Create a local `.env` from `.env.example` if needed.
+
 - `./manage.sh install`
-  - Installs required dependencies for `mcp/` and `team_bot/`.
+  - Installs dependencies for `mcp/`, `orchestrator/`, and `team_bot/` into `.venv`.
+
+- `./manage.sh mcp`
+  - Starts the MCP server on `MCP_PORT` (default `8000`).
+
+- `./manage.sh bot`
+  - Starts the Teams bot service on `BOT_PORT` (default `3978`).
+
+- `./manage.sh all`
+  - Starts both MCP and bot services together on separate ports.
+
+- `./manage.sh orchestrator`
+  - Prints guidance for the orchestrator component; the orchestrator is used internally by the bot and is not launched as a standalone server.
 
 - `./manage.sh test:mcp`
   - Runs only MCP server tests.
@@ -84,4 +100,4 @@ Use `manage.sh` for local operations.
 
 - The MCP backend is configurable, with mock backends available for local development.
 - Azure backend wiring is referenced in `mcp/main.py` but not implemented yet.
-- `team_bot/` is a placeholder for future chat or collaboration integration.
+- `team_bot/` is the Teams bot service and uses the orchestrator internally for meeting lifecycle coordination.
