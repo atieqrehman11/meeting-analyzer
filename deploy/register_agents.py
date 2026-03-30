@@ -44,7 +44,7 @@ def build_tools(tools_config: list) -> list:
     return definitions
 
 
-def deploy_agent(definition_path: pathlib.Path) -> None:
+def deploy_agent(definition_path: pathlib.Path) -> tuple[str, str]:
     defn = yaml.safe_load(definition_path.read_text())
     instructions = pathlib.Path(defn["instructions_file"]).read_text()
     tools = build_tools(defn.get("tools", []))
@@ -69,12 +69,19 @@ def deploy_agent(definition_path: pathlib.Path) -> None:
         )
         print(f"Created : {agent.name} ({agent.id})")
 
-    # Persist agent ID so the Orchestrator resolves it at runtime
-    id_path = pathlib.Path(f"deploy/agent_ids/{defn['name']}.txt")
-    id_path.parent.mkdir(exist_ok=True)
-    id_path.write_text(agent.id)
+    # Return name -> id for consolidation into orchestrator/agent_ids.json
+    return defn["name"], agent.id
 
 
 if __name__ == "__main__":
+    import json
+
+    agent_ids: dict[str, str] = {}
     for defn_file in sorted(pathlib.Path("agents/definitions").glob("*.yaml")):
-        deploy_agent(defn_file)
+        name, agent_id = deploy_agent(defn_file)
+        agent_ids[name] = agent_id
+
+    # Write consolidated agent_ids.json expected by orchestrator/foundry_client.py
+    ids_path = pathlib.Path("orchestrator/agent_ids.json")
+    ids_path.write_text(json.dumps(agent_ids, indent=2))
+    print(f"\nAgent IDs written to {ids_path}")

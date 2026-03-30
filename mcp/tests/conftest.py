@@ -16,22 +16,6 @@ def client():
         yield c
 
 
-@pytest.fixture(scope="session")
-def stage2_client():
-    """Client with active_stage=2 to test Stage 2 tools."""
-    with patch("app.config.settings.settings.active_stage", 2):
-        with TestClient(app) as c:
-            yield c
-
-
-@pytest.fixture(scope="session")
-def stage3_client():
-    """Client with active_stage=3 to test Stage 3 tools."""
-    with patch("app.config.settings.settings.active_stage", 3):
-        with TestClient(app) as c:
-            yield c
-
-
 # ---------------------------------------------------------------------------
 # Reusable payload factories
 # ---------------------------------------------------------------------------

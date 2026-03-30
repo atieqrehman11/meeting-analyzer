@@ -33,10 +33,3 @@ GraphDep = Annotated[GraphBackend, Depends(_graph)]
 SimilarityDep = Annotated[SimilarityService, Depends(_similarity)]
 
 
-def require_stage(min_stage: int):
-    """Dependency that raises FEATURE_NOT_ENABLED if active_stage < min_stage."""
-    def _check():
-        if settings.active_stage < min_stage:
-            from app.common.exceptions import FeatureNotEnabledError
-            raise FeatureNotEnabledError(f"stage_{min_stage}_tool")
-    return Depends(_check)

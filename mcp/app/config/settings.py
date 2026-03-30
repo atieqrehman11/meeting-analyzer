@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     # Backend: "mock" uses in-memory stubs, "azure" uses real Azure services
     backend_mode: str = "mock"
 
-    # Active stage controls which tools are live vs FEATURE_NOT_ENABLED
-    active_stage: int = 1
-
     # Azure Blob Storage
     azure_storage_account_url: str = ""
     blob_container_transcripts: str = "transcripts"

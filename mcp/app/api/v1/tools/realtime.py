@@ -5,9 +5,9 @@ from shared_models.mcp_types import (
     GetParticipantRatesInput, GetParticipantRatesOutput, ParticipantRate,
     StoreCostSnapshotInput,
 )
-from app.dependencies import DatabaseDep, GraphDep, require_stage
+from app.dependencies import DatabaseDep, GraphDep
 
-router = APIRouter(prefix="/realtime", tags=["realtime"], dependencies=[require_stage(2)])
+router = APIRouter(prefix="/realtime", tags=["realtime"])
 
 
 @router.post("/send_realtime_alert", status_code=204)

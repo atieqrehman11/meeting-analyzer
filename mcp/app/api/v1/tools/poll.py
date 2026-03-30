@@ -1,9 +1,9 @@
 """Stage 3 tool: create_poll."""
 from fastapi import APIRouter, Depends
 from shared_models.mcp_types import CreatePollInput, CreatePollOutput
-from app.dependencies import GraphDep, require_stage
+from app.dependencies import GraphDep
 
-router = APIRouter(prefix="/poll", tags=["poll"], dependencies=[require_stage(3)])
+router = APIRouter(prefix="/poll", tags=["poll"])
 
 
 @router.post("/create_poll", response_model=CreatePollOutput)

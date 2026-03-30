@@ -23,7 +23,7 @@ def _build_backends(app: FastAPI) -> None:
         app.state.graph = MockGraphBackend()
 
     app.state.similarity = SimilarityService()
-    logger.info("Backends initialised (mode=%s, stage=%d)", settings.backend_mode, settings.active_stage)
+    logger.info("Backends initialised (mode=%s)", settings.backend_mode)
 
 
 @asynccontextmanager

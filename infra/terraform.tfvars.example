@@ -1,0 +1,15 @@
+resource_group_name       = "your-existing-resource-group"
+environment_name          = "meeting-analyzer"
+mcp_backend_mode          = "mock"            # mock | azure
+acr_sku                   = "Basic"
+acr_image_tag             = "latest"
+cosmos_database_name      = "meeting-analysis"
+mcp_log_level             = "INFO"
+bot_log_level             = "INFO"
+azure_ai_project_endpoint = ""
+graph_tenant_id           = ""
+graph_client_id           = ""
+
+# Teams bot registration (teams.tf)
+bot_service_sku         = "F0"   # F0 for dev, S1 for production
+bot_secret_expiry_years = 1
