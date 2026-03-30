@@ -22,3 +22,6 @@ deploy/agent_ids/
 site/
 dist/
 build/
+
+.terraform
+.terraform.locl.hcl
