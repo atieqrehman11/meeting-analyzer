@@ -4,12 +4,8 @@ All functions are fully unit-testable in isolation.
 """
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Union
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from shared_models.a2a_schemas import AnalyzeMeetingResponse, AnalyzeSentimentResponse
 from shared_models.mcp_types import (

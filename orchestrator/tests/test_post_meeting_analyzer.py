@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from post_meeting_analyzer import PostMeetingAnalyzer
+from orchestrator.post_meeting_analyzer import PostMeetingAnalyzer
 from shared_models.a2a_schemas import (
     AnalyzeMeetingResponse,
     AnalyzeSentimentResponse,
@@ -149,7 +149,7 @@ async def test_run_marks_sentiment_unavailable_on_agent_error():
 
 @pytest.mark.anyio
 async def test_run_attempts_fallback_dm_if_card_delivery_fails():
-    from mcp_client import McpCallError
+    from orchestrator.mcp_client import McpCallError
     mcp = _make_mcp()
     mcp.post_adaptive_card = AsyncMock(
         side_effect=[

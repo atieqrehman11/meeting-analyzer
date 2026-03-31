@@ -4,6 +4,8 @@ from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings
 from botbuilder.schema import Activity
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import Any
 
 from team_bot.app.common.logger import logger
 from team_bot.app.config.settings import settings
@@ -22,7 +24,32 @@ bot = TeamsMeetingBot(manager)
 router = APIRouter()
 
 
-@router.post("/api/messages")
+class ActivityPayload(BaseModel):
+    """
+    Teams Bot Framework Activity envelope.
+    See: https://learn.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-connector-api-reference#activity-object
+    """
+    type: str
+    id: str | None = None
+    timestamp: str | None = None
+    channelId: str | None = None
+    from_: dict[str, Any] | None = None
+    recipient: dict[str, Any] | None = None
+    conversation: dict[str, Any] | None = None
+    text: str | None = None
+    membersAdded: list[dict[str, Any]] | None = None
+    membersRemoved: list[dict[str, Any]] | None = None
+    channelData: dict[str, Any] | None = None
+    name: str | None = None
+    value: dict[str, Any] | None = None
+
+    model_config = {"populate_by_name": True, "extra": "allow"}
+
+
+@router.post("/api/messages", openapi_extra={"requestBody": {
+    "content": {"application/json": {"schema": ActivityPayload.model_json_schema()}},
+    "required": True,
+}})
 async def messages(request: Request, authorization: str | None = Header(default=None)) -> JSONResponse:
     body = await request.json()
     activity = Activity().deserialize(body)

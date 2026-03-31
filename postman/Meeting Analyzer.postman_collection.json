@@ -1,0 +1,552 @@
+{
+  "info": {
+    "name": "Meeting Analyzer",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Full meeting lifecycle test suite. Run via Collection Runner to execute all phases in sequence."
+  },
+  "variable": [
+    { "key": "mcp_url", "value": "http://localhost:8000" },
+    { "key": "bot_url", "value": "http://localhost:3978" },
+    { "key": "meeting_id", "value": "mtg-runner-001" },
+    { "key": "bot_id", "value": "bot-1" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ensure meeting_id is set for the whole run",
+          "if (!pm.collectionVariables.get('meeting_id')) {",
+          "  pm.collectionVariables.set('meeting_id', 'mtg-runner-001');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Phase 1 - Start Meeting",
+      "item": [
+        {
+          "name": "01 - Bot Joins Meeting",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Bot join returns 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{bot_url}}/api/messages",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"conversationUpdate\",\n  \"id\": \"activity-001\",\n  \"timestamp\": \"2026-01-01T10:00:00Z\",\n  \"channelId\": \"msteams\",\n  \"from\": { \"id\": \"user-1\", \"name\": \"Alice\" },\n  \"recipient\": { \"id\": \"{{bot_id}}\", \"name\": \"MeetingBot\" },\n  \"conversation\": { \"id\": \"{{meeting_id}}\" },\n  \"membersAdded\": [\n    { \"id\": \"{{bot_id}}\", \"name\": \"MeetingBot\" },\n    { \"id\": \"p-1\", \"name\": \"Alice\" },\n    { \"id\": \"p-2\", \"name\": \"Bob\" }\n  ],\n  \"membersRemoved\": [],\n  \"channelData\": {\n    \"meeting\": { \"id\": \"{{meeting_id}}\" },\n    \"participants\": [\n      { \"id\": \"p-1\", \"name\": \"Alice\", \"tenantId\": \"t-1\", \"role\": \"presenter\" },\n      { \"id\": \"p-2\", \"name\": \"Bob\", \"tenantId\": \"t-1\", \"role\": \"attendee\" }\n    ]\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 2 - Verify Meeting Initialised",
+      "item": [
+        {
+          "name": "02 - Get Calendar Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('meeting_id matches', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.meeting_id).to.eql(pm.collectionVariables.get('meeting_id'));",
+                  "});",
+                  "pm.test('Has subject', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.subject).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/meeting/get_calendar_event",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meeting_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "03 - Get Recording Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('recording_enabled is boolean', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.recording_enabled).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/meeting/get_recording_status",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meeting_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 3 - Consent",
+      "item": [
+        {
+          "name": "04 - Store Consent - Granted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 204', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/consent/store_consent_record",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_record\": {\n    \"id\": \"consent_{{meeting_id}}_p-1\",\n    \"type\": \"consent\",\n    \"meeting_id\": \"{{meeting_id}}\",\n    \"participant_id\": \"p-1\",\n    \"participant_name\": \"Alice\",\n    \"decision\": \"granted\",\n    \"timestamp\": \"2026-01-01T10:01:00Z\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "05 - Store Consent - Declined",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 204', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/consent/store_consent_record",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_record\": {\n    \"id\": \"consent_{{meeting_id}}_p-2\",\n    \"type\": \"consent\",\n    \"meeting_id\": \"{{meeting_id}}\",\n    \"participant_id\": \"p-2\",\n    \"participant_name\": \"Bob\",\n    \"decision\": \"declined\",\n    \"timestamp\": \"2026-01-01T10:01:30Z\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 4 - Transcript",
+      "item": [
+        {
+          "name": "06 - Store Transcript Segment - Consented",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 204', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_{{meeting_id}}_1\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"{{meeting_id}}\",\n    \"sequence\": 1,\n    \"participant_id\": \"p-1\",\n    \"participant_name\": \"Alice\",\n    \"text\": \"Let us review the Q1 budget numbers.\",\n    \"start_time\": \"2026-01-01T10:02:00Z\",\n    \"end_time\": \"2026-01-01T10:02:10Z\",\n    \"duration_seconds\": 10.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "07 - Store Transcript Segment - No Consent (expect 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 400', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Error code is CONSENT_REQUIRED', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.code).to.eql('CONSENT_REQUIRED');",
+                  "});",
+                  "pm.test('Error envelope is well-formed', function () {",
+                  "  var err = pm.response.json().error;",
+                  "  pm.expect(err.code).to.be.a('string');",
+                  "  pm.expect(err.message).to.be.a('string');",
+                  "  pm.expect(err.retryable).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_{{meeting_id}}_2\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"{{meeting_id}}\",\n    \"sequence\": 2,\n    \"participant_id\": \"p-2\",\n    \"participant_name\": \"Bob\",\n    \"text\": \"I agree with that.\",\n    \"start_time\": \"2026-01-01T10:02:15Z\",\n    \"end_time\": \"2026-01-01T10:02:18Z\",\n    \"duration_seconds\": 3.0,\n    \"consent_verified\": false\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 5 - Realtime Monitoring",
+      "item": [
+        {
+          "name": "08 - Compute Similarity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('scores array length matches topics', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.scores).to.have.lengthOf(3);",
+                  "});",
+                  "pm.test('max_score is between 0 and 1', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.max_score).to.be.within(0, 1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/similarity/compute_similarity",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"We need to review the Q1 budget numbers and discuss action items.\",\n  \"agenda_topics\": [\"Budget review\", \"Action items\", \"Roadmap planning\"],\n  \"meeting_id\": \"{{meeting_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "09 - Get Participant Rates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('rates array has 2 entries', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.rates).to.have.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/get_participant_rates",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meeting_id}}\",\n  \"participant_ids\": [\"p-1\", \"p-2\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "10 - Store Cost Snapshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 204', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/store_cost_snapshot",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"snapshot\": {\n    \"id\": \"cost_{{meeting_id}}_0\",\n    \"type\": \"cost_snapshot\",\n    \"meeting_id\": \"{{meeting_id}}\",\n    \"snapshot_index\": 0,\n    \"captured_at\": \"2026-01-01T10:05:00Z\",\n    \"elapsed_minutes\": 5.0,\n    \"active_participant_count\": 2,\n    \"total_cost\": 50.0,\n    \"currency\": \"USD\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "11 - Send Realtime Alert - Off Track",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 204', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/send_realtime_alert",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meeting_id}}\",\n  \"alert_type\": \"off_track\",\n  \"card_payload\": {\n    \"type\": \"off_track\",\n    \"meeting_id\": \"{{meeting_id}}\",\n    \"max_similarity\": 0.12\n  },\n  \"target_participant_ids\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "12 - Send Realtime Alert - Unknown Type (expect 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 400', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Error code is FEATURE_NOT_ENABLED', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.code).to.eql('FEATURE_NOT_ENABLED');",
+                  "});",
+                  "pm.test('retryable is false', function () {",
+                  "  pm.expect(pm.response.json().error.retryable).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/send_realtime_alert",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meeting_id}}\",\n  \"alert_type\": \"not_a_real_alert\",\n  \"card_payload\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 6 - End Meeting",
+      "item": [
+        {
+          "name": "13 - Bot Leaves Meeting",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Bot leave returns 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{bot_url}}/api/messages",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"conversationUpdate\",\n  \"id\": \"activity-002\",\n  \"timestamp\": \"2026-01-01T11:00:00Z\",\n  \"channelId\": \"msteams\",\n  \"from\": { \"id\": \"user-1\", \"name\": \"Alice\" },\n  \"recipient\": { \"id\": \"{{bot_id}}\", \"name\": \"MeetingBot\" },\n  \"conversation\": { \"id\": \"{{meeting_id}}\" },\n  \"membersAdded\": [],\n  \"membersRemoved\": [\n    { \"id\": \"{{bot_id}}\", \"name\": \"MeetingBot\" }\n  ],\n  \"channelData\": {\n    \"meeting\": { \"id\": \"{{meeting_id}}\" }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 7 - Verify Post-Meeting Output",
+      "item": [
+        {
+          "name": "14 - Get Analysis Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('meeting_id matches', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.meeting_id).to.eql(pm.collectionVariables.get('meeting_id'));",
+                  "});",
+                  "pm.test('agenda is present', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.agenda).to.be.an('array');",
+                  "});",
+                  "pm.test('generated_at is set', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.generated_at).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/analysis/get_analysis_report",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meeting_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "15 - Get Analysis Report - Not Found (expect 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 400', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Error code is REPORT_NOT_FOUND', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.code).to.eql('REPORT_NOT_FOUND');",
+                  "});",
+                  "pm.test('Error envelope is well-formed', function () {",
+                  "  var err = pm.response.json().error;",
+                  "  pm.expect(err.code).to.be.a('string');",
+                  "  pm.expect(err.message).to.be.a('string');",
+                  "  pm.expect(err.retryable).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/analysis/get_analysis_report",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"mtg-does-not-exist\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 8 - Poll",
+      "item": [
+        {
+          "name": "16 - Create Poll",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('poll_id is returned', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.poll_id).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/poll/create_poll",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meeting_id}}\",\n  \"action_items\": [\n    {\n      \"id\": \"action_{{meeting_id}}_1\",\n      \"type\": \"action_item\",\n      \"meeting_id\": \"{{meeting_id}}\",\n      \"sequence\": 1,\n      \"description\": \"Prepare Q2 budget proposal\",\n      \"owner_participant_id\": \"p-1\",\n      \"owner_name\": \"Alice\",\n      \"due_date\": \"2026-01-15\",\n      \"transcript_timestamp\": \"2026-01-01T10:30:00Z\",\n      \"status\": \"Proposed\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

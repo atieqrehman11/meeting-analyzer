@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 class OrchestratorConfig(BaseSettings):
     # Azure AI Foundry
     azure_ai_project_endpoint: str = ""
+    foundry_mode: str = "azure"  # "azure" | "mock"
 
     # MCP server
     mcp_server_url: str = "http://localhost:8000"

@@ -51,42 +51,48 @@ activate_venv() {
 }
 
 install_deps() {
-    local req="$1"
+    local pkg_dir="$1"
+    local req="${pkg_dir}/requirements.txt"
     local hash_file="${req%.txt}.sha"
+    local pyproject="${pkg_dir}/pyproject.toml"
     local current stored=""
 
     if command -v sha256sum >/dev/null 2>&1; then
-        current=$(sha256sum "$req" | awk '{print $1}')
+        current=$(sha256sum "$pyproject" "$req" 2>/dev/null | sha256sum | awk '{print $1}')
     else
-        current=$(cksum "$req" | awk '{print $1}')
+        current=$(cksum "$pyproject" "$req" 2>/dev/null | cksum | awk '{print $1}')
     fi
 
     [ -f "$hash_file" ] && stored=$(cat "$hash_file")
 
     if [ "$current" != "$stored" ] || ! python3 -c "import fastapi" 2>/dev/null; then
-        echo "Installing dependencies from $(basename "$req") ..."
-        pip install -q -r "$req"
+        echo "Installing $(basename "$pkg_dir") ..."
+        pip install -q -e "${pkg_dir}[dev]" 2>/dev/null || pip install -q -e "$pkg_dir"
         echo "$current" > "$hash_file"
     else
-        echo "Dependencies up to date."
+        echo "$(basename "$pkg_dir") up to date."
     fi
 }
 
 setup_mcp() {
     activate_venv
-    install_deps "$MCP_DIR/requirements.txt"
+    pip install -q -e "$REPO_ROOT/shared_models" 2>/dev/null || true
+    install_deps "$MCP_DIR"
     export PYTHONPATH="$MCP_DIR:$REPO_ROOT"
 }
 
 setup_orchestrator() {
     activate_venv
-    install_deps "$ORCHESTRATOR_DIR/requirements.txt"
-    export PYTHONPATH="$REPO_ROOT:$ORCHESTRATOR_DIR"
+    pip install -q -e "$REPO_ROOT/shared_models" 2>/dev/null || true
+    install_deps "$ORCHESTRATOR_DIR"
+    export PYTHONPATH="$MCP_DIR:$REPO_ROOT"
 }
 
 setup_team_bot() {
     activate_venv
-    install_deps "$TEAM_BOT_DIR/requirements.txt"
+    pip install -q -e "$REPO_ROOT/shared_models" 2>/dev/null || true
+    pip install -q -e "$REPO_ROOT/orchestrator" 2>/dev/null || true
+    install_deps "$TEAM_BOT_DIR"
     export PYTHONPATH="$REPO_ROOT:$TEAM_BOT_DIR"
 }
 
@@ -299,10 +305,13 @@ case "${1:-help}" in
 
     install)
         load_env
-        setup_mcp
-        setup_orchestrator
-        setup_team_bot
-        echo "All dependencies installed."
+        activate_venv
+        echo "Installing all packages in editable mode..."
+        pip install -q -e "$REPO_ROOT/shared_models"
+        pip install -q -e "$REPO_ROOT/orchestrator[dev]"
+        pip install -q -e "$REPO_ROOT/mcp[dev]"
+        pip install -q -e "$REPO_ROOT/team_bot[dev]"
+        echo "All packages installed."
         ;;
 
     env:init)

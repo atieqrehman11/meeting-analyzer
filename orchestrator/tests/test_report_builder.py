@@ -2,7 +2,7 @@
 import pytest
 from datetime import datetime, timezone
 
-from report_builder import compile_report, build_report_card
+from orchestrator.report_builder import compile_report, build_report_card
 from shared_models.a2a_schemas import (
     AnalyzeMeetingResponse,
     AnalyzeSentimentResponse,

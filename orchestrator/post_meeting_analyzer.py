@@ -11,9 +11,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from foundry_client import FoundryClient
+from orchestrator.foundry_client import FoundryClient
 from shared_models.mcp_client import BaseMcpClient, McpCallError
-from report_builder import build_report_card, compile_report
+from orchestrator.report_builder import build_report_card, compile_report
 from shared_models.a2a_schemas import (
     AnalyzeMeetingResponse,
     AnalyzeMeetingTask,

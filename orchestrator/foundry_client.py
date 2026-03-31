@@ -7,21 +7,23 @@ import asyncio
 import importlib
 import json
 import logging
-import sys
 from pathlib import Path
 
-from config import OrchestratorConfig
-
-# Allow shared_models to be imported when running from agent-orchestrator/
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from orchestrator.config import OrchestratorConfig
 
 logger = logging.getLogger("orchestrator.foundry_client")
 
 _AGENT_IDS_FILE = Path(__file__).parent / "agent_ids.json"
 
 
-def build_foundry_client(config: OrchestratorConfig) -> "FoundryClient":
-    """Construct a FoundryClient from the given config."""
+def build_foundry_client(config: OrchestratorConfig) -> "FoundryClient | MockFoundryClient":
+    """Construct a FoundryClient from the given config.
+    Returns MockFoundryClient when ORCH_FOUNDRY_MODE=mock (local dev).
+    """
+    if config.foundry_mode == "mock":
+        logger.info("Foundry running in mock mode — agent calls return canned responses")
+        return MockFoundryClient()
+
     try:
         AIProjectClient = importlib.import_module("azure.ai.projects").AIProjectClient
         DefaultAzureCredential = importlib.import_module("azure.identity").DefaultAzureCredential
@@ -36,6 +38,118 @@ def build_foundry_client(config: OrchestratorConfig) -> "FoundryClient":
         credential=DefaultAzureCredential(),
     )
     return FoundryClient(ai_client)
+
+
+def load_agent_ids() -> dict[str, str]:
+    """Load agent ID mapping from agent_ids.json next to this file."""
+    if not _AGENT_IDS_FILE.exists():
+        raise FileNotFoundError(
+            f"Agent IDs file not found: {_AGENT_IDS_FILE}. "
+            "Run deploy/register_agents.py to generate it."
+        )
+    return json.loads(_AGENT_IDS_FILE.read_text())
+
+
+class MockFoundryClient:
+    """
+    Local-dev stand-in for FoundryClient.
+    Returns minimal valid responses for each task type so the full
+    meeting lifecycle can be exercised without Azure AI Foundry.
+    """
+
+    async def dispatch(self, agent_id: str, task: dict) -> dict:
+        return self._respond(task)
+
+    async def dispatch_with_timeout(
+        self, agent_id: str, task: dict, timeout_seconds: float
+    ) -> dict:
+        return self._respond(task)
+
+    def _respond(self, task: dict) -> dict:
+        task_type = task.get("task", "")
+        meeting_id = task.get("meeting_id", "unknown")
+
+        if task_type == "capture_transcript_segment":
+            return {
+                "task": "capture_transcript_segment",
+                "status": "ok",
+                "segments_captured": 1,
+                "blob_url": f"mock://transcripts/{meeting_id}/segment.json",
+                "gap_detected": False,
+            }
+        if task_type == "finalize_transcript":
+            return {
+                "task": "finalize_transcript",
+                "status": "ok",
+                "transcript_blob_url": f"mock://transcripts/{meeting_id}/final.json",
+            }
+        if task_type == "analyze_meeting":
+            return {
+                "task": "analyze_meeting",
+                "status": "ok",
+                "agenda": ["Mock agenda item 1", "Mock agenda item 2"],
+                "agenda_source": "inferred",
+                "agenda_adherence": [],
+                "time_allocation": [],
+                "action_items": [],
+                "sections_failed": [],
+            }
+        if task_type == "analyze_sentiment":
+            return {
+                "task": "analyze_sentiment",
+                "status": "ok",
+                "participation_summary": [],
+                "sections_failed": [],
+            }
+        if task_type == "compute_participation_pulse":
+            return {
+                "task": "compute_participation_pulse",
+                "status": "ok",
+                "active_speakers": [],
+                "silent_participants": [],
+                "energy_level": "Medium",
+            }
+        # Unknown task — return a safe error envelope
+        logger.warning("MockFoundryClient: unrecognised task '%s'", task_type)
+        return {"status": "error", "error": f"Unrecognized task: {task_type}"}
+
+
+class FoundryClient:
+    """Async wrapper around AIProjectClient for A2A task dispatch."""
+
+    def __init__(self, ai_client) -> None:
+        self._client = ai_client
+
+    async def dispatch(self, agent_id: str, task: dict) -> dict:
+        """Dispatch a task to an agent and return the parsed response."""
+        return await asyncio.to_thread(self._dispatch_sync, agent_id, task)
+
+    async def dispatch_with_timeout(
+        self, agent_id: str, task: dict, timeout_seconds: float
+    ) -> dict:
+        """Dispatch with one retry on timeout. Returns an error dict on repeated failure."""
+        for attempt in range(1, 3):
+            try:
+                async with asyncio.timeout(timeout_seconds):
+                    return await self.dispatch(agent_id, task)
+            except asyncio.TimeoutError:
+                logger.warning("Agent %s timed out (attempt %d/2)", agent_id, attempt)
+        return {"status": "error", "error": "Agent timed out after 2 attempts"}
+
+    def _dispatch_sync(self, agent_id: str, task: dict) -> dict:
+        """Synchronous Foundry call — runs in a thread via dispatch()."""
+        thread = self._client.agents.threads.create()
+        self._client.agents.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=json.dumps(task),
+        )
+        self._client.agents.runs.create_and_process(
+            thread_id=thread.id,
+            agent_id=agent_id,
+        )
+        messages = self._client.agents.messages.list(thread_id=thread.id)
+        return json.loads(messages.data[0].content[0].text.value)
 
 
 def load_agent_ids() -> dict[str, str]:

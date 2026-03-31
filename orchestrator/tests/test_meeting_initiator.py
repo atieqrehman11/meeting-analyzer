@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
-from meeting_initiator import MeetingInitiator, _build_meeting_record
+from orchestrator.meeting_initiator import MeetingInitiator, _build_meeting_record
 from shared_models.mcp_types import CalendarEventOutput
 
 
@@ -95,7 +95,7 @@ async def test_initialise_sends_missing_agenda_alert_when_no_agenda(mcp):
 
 @pytest.mark.anyio
 async def test_initialise_continues_if_alert_fails(mcp):
-    from mcp_client import McpCallError
+    from orchestrator.mcp_client import McpCallError
     mcp.get_calendar_event = AsyncMock(return_value=_calendar(agenda=[]))
     mcp.send_realtime_alert = AsyncMock(
         side_effect=McpCallError("GRAPH_UNAVAILABLE", "Graph down", retryable=True)

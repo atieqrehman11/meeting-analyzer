@@ -3,19 +3,18 @@ Shared fixtures for orchestrator tests.
 Spins up the MCP server in-process and points McpClient at it.
 """
 import sys
-import os
+from pathlib import Path
 import pytest
 import httpx
 from fastapi.testclient import TestClient
 
-# Make shared_models and mcp_server importable
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-sys.path.insert(0, REPO_ROOT)
-sys.path.insert(0, os.path.join(REPO_ROOT, "mcp"))
-sys.path.insert(0, os.path.join(REPO_ROOT, "orchestrator"))
+# mcp/main.py is not an installed module — add mcp/ to path
+_MCP_DIR = str(Path(__file__).resolve().parents[2] / "mcp")
+if _MCP_DIR not in sys.path:
+    sys.path.insert(0, _MCP_DIR)
 
-from main import app as mcp_app  # noqa: E402 — mcp_server/main.py
-from mcp_client import McpClient  # noqa: E402
+from main import app as mcp_app  # mcp/main.py
+from orchestrator.mcp_client import McpClient
 
 
 class _TestTransport(httpx.AsyncBaseTransport):

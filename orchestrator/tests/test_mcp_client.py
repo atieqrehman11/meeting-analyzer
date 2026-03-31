@@ -9,7 +9,7 @@ from shared_models.mcp_types import (
     MeetingRecord, TranscriptSegment, ConsentRecord, AnalysisReport,
     MeetingCostSnapshot,
 )
-from mcp_client import McpClient, McpCallError
+from orchestrator.mcp_client import McpClient, McpCallError
 
 
 def _now() -> str:

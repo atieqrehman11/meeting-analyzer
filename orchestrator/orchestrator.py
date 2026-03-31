@@ -8,17 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
-from pathlib import Path
 from typing import Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from config import OrchestratorConfig
-from foundry_client import FoundryClient, build_foundry_client, load_agent_ids
+from orchestrator.config import OrchestratorConfig
+from orchestrator.foundry_client import FoundryClient, build_foundry_client, load_agent_ids
 from shared_models.mcp_client import BaseMcpClient
-from meeting_initiator import MeetingInitiator
-from post_meeting_analyzer import PostMeetingAnalyzer
+from orchestrator.meeting_initiator import MeetingInitiator
+from orchestrator.post_meeting_analyzer import PostMeetingAnalyzer
 from shared_models.a2a_schemas import CaptureTranscriptSegmentTask
 
 logger = logging.getLogger("orchestrator")
@@ -68,13 +64,14 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     def _start_loops(self, meeting_id: str, record) -> None:
-        from real_time_loop import RealTimeLoop
+        from orchestrator.real_time_loop import RealTimeLoop
 
         self._capture_task = asyncio.create_task(
             self._transcript_capture_loop(meeting_id),
             name=f"capture-{meeting_id}",
         )
-        loop = RealTimeLoop(meeting_id, record, self._mcp, self._cfg)
+        loop = RealTimeLoop(meeting_id, record, self._mcp, self._cfg,
+                            agenda=getattr(record, "agenda", []) or [])
         self._realtime_task = asyncio.create_task(
             loop.run(), name=f"realtime-{meeting_id}"
         )

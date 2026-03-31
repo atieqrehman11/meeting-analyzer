@@ -3,8 +3,8 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from config import OrchestratorConfig
-from orchestrator import Orchestrator
+from orchestrator.config import OrchestratorConfig
+from orchestrator.orchestrator import Orchestrator
 
 
 def _config() -> OrchestratorConfig:
@@ -30,8 +30,8 @@ def _make_orchestrator(mcp=None) -> Orchestrator:
     mcp = mcp or _make_mcp()
 
     with (
-        patch("orchestrator.build_foundry_client") as mock_foundry,
-        patch("orchestrator.load_agent_ids", return_value={
+        patch("orchestrator.orchestrator.build_foundry_client") as mock_foundry,
+        patch("orchestrator.orchestrator.load_agent_ids", return_value={
             "transcript": "t-id", "analysis": "a-id", "sentiment": "s-id"
         }),
     ):

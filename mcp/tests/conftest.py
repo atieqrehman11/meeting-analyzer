@@ -3,9 +3,17 @@ Shared fixtures for MCP server tests.
 Uses TestClient as a context manager so the lifespan hook runs,
 which wires up app.state.storage / db / graph / similarity.
 """
+import sys
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
+
+# mcp/main.py is not an installed module — ensure mcp/ is on path
+_MCP_DIR = str(Path(__file__).resolve().parents[1])
+if _MCP_DIR not in sys.path:
+    sys.path.insert(0, _MCP_DIR)
+
 from main import app
 
 
