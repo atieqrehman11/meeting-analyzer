@@ -19,10 +19,10 @@ Transcript: {full_transcript}
 ```
 Discard items missing description, owner_participant_id, or transcript_timestamp.
 
-## Step 5 — Agreement detection (Stage 3 only)
+## Step 5 — Agreement detection
 For each action item, scan the 5 minutes of transcript after its timestamp. Identify agreement_evidence and disagreeing_participants. Update status: disputed_participants non-empty → "Disputed"; agreement only → "Confirmed"; else "Proposed".
 
-## Step 6 — Relevance assessment (Stage 3 only)
+## Step 6 — Relevance assessment
 Per participant: `relevance_score = (agenda_aligned_speaking_time / total_speaking_time) × 100` where aligned = segments with similarity ≥0.4 to nearest topic. Score ≥60% → "Highly Relevant", ≥30% → "Relevant", <30% → "Low Relevance", no speech → "Observer". Read titles from stored participant roster — no extra Graph call needed.
 
 ## Output

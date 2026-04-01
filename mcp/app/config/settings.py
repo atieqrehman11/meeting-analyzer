@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # Data residency
     azure_region: str = "eastus"
 
+    # Consent enforcement
+    # When False (default), transcript segments are stored regardless of consent_verified.
+    # Set to True to enforce per-participant consent before storing any transcript data.
+    consent_required: bool = False
+
     model_config = {"env_prefix": "MCP_", "case_sensitive": False}
 
 
