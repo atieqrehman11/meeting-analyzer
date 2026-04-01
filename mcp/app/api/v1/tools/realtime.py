@@ -16,6 +16,7 @@ _REALTIME_ALERT_TYPES = {
     "purpose_detected", "purpose_drift",
     "tone_private", "tone_meeting",
     "silent_participant", "missing_agenda",
+    "time_remaining",
 }
 
 

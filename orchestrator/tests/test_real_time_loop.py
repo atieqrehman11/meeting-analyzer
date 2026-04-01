@@ -307,3 +307,101 @@ async def test_participation_pulse_skipped_with_no_participants():
     loop._last_pulse_at = None
     await loop._check_participation_pulse(time.monotonic())
     mock_mcp.get_participant_rates.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Time remaining alert
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timezone, timedelta
+
+
+def _loop_with_end(minutes_from_now: float, agenda=None, mcp=None) -> RealTimeLoop:
+    """Build a loop whose scheduled end is `minutes_from_now` minutes in the future."""
+    end = (datetime.now(timezone.utc) + timedelta(minutes=minutes_from_now)).isoformat()
+    return RealTimeLoop(
+        meeting_id="mtg-rt-001",
+        record=_record(),
+        mcp=mcp or _mcp(),
+        cfg=_cfg(time_remaining_alert_minutes=5),
+        agenda=agenda if agenda is not None else ["Budget review", "Roadmap"],
+        scheduled_end_time=end,
+    )
+
+
+@pytest.mark.anyio
+async def test_time_remaining_alert_sent_within_window():
+    mock_mcp = _mcp()
+    loop = _loop_with_end(minutes_from_now=3, mcp=mock_mcp)  # 3 min left < 5 min threshold
+    await loop._check_time_remaining()
+    mock_mcp.send_realtime_alert.assert_awaited_once()
+    alert_type = mock_mcp.send_realtime_alert.call_args.args[1]
+    assert alert_type == "time_remaining"
+
+
+@pytest.mark.anyio
+async def test_time_remaining_alert_not_sent_outside_window():
+    mock_mcp = _mcp()
+    loop = _loop_with_end(minutes_from_now=20, mcp=mock_mcp)  # 20 min left > 5 min threshold
+    await loop._check_time_remaining()
+    mock_mcp.send_realtime_alert.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_time_remaining_alert_fires_only_once():
+    mock_mcp = _mcp()
+    loop = _loop_with_end(minutes_from_now=3, mcp=mock_mcp)
+    await loop._check_time_remaining()
+    await loop._check_time_remaining()  # second call — already sent
+    assert mock_mcp.send_realtime_alert.await_count == 1
+
+
+@pytest.mark.anyio
+async def test_time_remaining_alert_not_sent_when_no_end_time():
+    mock_mcp = _mcp()
+    loop = RealTimeLoop(
+        meeting_id="mtg-rt-001",
+        record=_record(),
+        mcp=mock_mcp,
+        cfg=_cfg(time_remaining_alert_minutes=5),
+        agenda=["Budget review"],
+        scheduled_end_time=None,
+    )
+    await loop._check_time_remaining()
+    mock_mcp.send_realtime_alert.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_time_remaining_card_includes_uncovered_topics():
+    mock_mcp = _mcp()
+    loop = _loop_with_end(minutes_from_now=3, mcp=mock_mcp,
+                          agenda=["Budget review", "Roadmap"])
+    # Simulate that "Budget review" was covered but "Roadmap" was not
+    loop._topic_max_scores = {"Budget review": 0.9, "Roadmap": 0.1}
+    await loop._check_time_remaining()
+
+    card = mock_mcp.send_realtime_alert.call_args.args[2]
+    assert "Roadmap" in card["uncovered_agenda_topics"]
+    assert "Budget review" not in card["uncovered_agenda_topics"]
+
+
+@pytest.mark.anyio
+async def test_time_remaining_card_empty_uncovered_when_all_covered():
+    mock_mcp = _mcp()
+    loop = _loop_with_end(minutes_from_now=3, mcp=mock_mcp,
+                          agenda=["Budget review", "Roadmap"])
+    loop._topic_max_scores = {"Budget review": 0.9, "Roadmap": 0.8}
+    await loop._check_time_remaining()
+
+    card = mock_mcp.send_realtime_alert.call_args.args[2]
+    assert card["uncovered_agenda_topics"] == []
+
+
+@pytest.mark.anyio
+async def test_time_remaining_card_includes_minutes_remaining():
+    mock_mcp = _mcp()
+    loop = _loop_with_end(minutes_from_now=4, mcp=mock_mcp)
+    await loop._check_time_remaining()
+
+    card = mock_mcp.send_realtime_alert.call_args.args[2]
+    assert card["minutes_remaining"] >= 3  # allow for test execution time

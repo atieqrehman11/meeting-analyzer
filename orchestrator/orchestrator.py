@@ -70,8 +70,11 @@ class Orchestrator:
             self._transcript_capture_loop(meeting_id),
             name=f"capture-{meeting_id}",
         )
-        loop = RealTimeLoop(meeting_id, record, self._mcp, self._cfg,
-                            agenda=getattr(record, "agenda", []) or [])
+        loop = RealTimeLoop(
+            meeting_id, record, self._mcp, self._cfg,
+            agenda=getattr(record, "agenda", []) or [],
+            scheduled_end_time=getattr(record, "end_time", None),
+        )
         self._realtime_task = asyncio.create_task(
             loop.run(), name=f"realtime-{meeting_id}"
         )

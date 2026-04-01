@@ -7,12 +7,14 @@ Responsibilities (per orchestrator_v1.md):
   2. Purpose detection — classify meeting purpose once, then re-check for drift
   3. Tone monitoring — detect tone issues, send private/meeting alerts
   4. Participation pulse — snapshot active/silent speakers, alert on silence
+  5. Time remaining — warn when approaching scheduled end, list open items
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from orchestrator.config import OrchestratorConfig
@@ -36,6 +38,7 @@ class RealTimeLoop:
         mcp: BaseMcpClient,
         cfg: OrchestratorConfig,
         agenda: list[str] | None = None,
+        scheduled_end_time: str | None = None,
     ) -> None:
         self._meeting_id = meeting_id
         self._record = record
@@ -45,8 +48,15 @@ class RealTimeLoop:
         # Falls back to empty list if not provided (no-agenda meeting).
         self._agenda: list[str] = agenda or []
 
+        # Scheduled end time from calendar event (ISO8601). Used for time-remaining alert.
+        # Falls back to record.end_time if not explicitly provided.
+        raw_end = scheduled_end_time or getattr(record, "end_time", None)
+        self._scheduled_end: Optional[datetime] = _parse_iso(raw_end)
+
         # Agenda adherence state
         self._similarity_buffer: list[float] = []
+        # Per-topic last-seen max score — used to determine which topics are uncovered
+        self._topic_max_scores: dict[str, float] = {}
         self._alert_timestamps: dict[str, float] = {}  # alert_type → epoch
 
         # Purpose detection state
@@ -58,6 +68,9 @@ class RealTimeLoop:
         # Participation pulse state
         self._pulse_snapshot_count: int = 0
         self._last_pulse_at: Optional[float] = None
+
+        # Time remaining state — fire once only
+        self._time_remaining_sent: bool = False
 
     # ------------------------------------------------------------------
     # Entry point
@@ -81,8 +94,9 @@ class RealTimeLoop:
         now = time.monotonic()
         await self._check_agenda_adherence()
         await self._check_purpose(now)
-        await self._check_tone()
+        self._check_tone()
         await self._check_participation_pulse(now)
+        await self._check_time_remaining()
 
     # ------------------------------------------------------------------
     # 1. Agenda adherence
@@ -105,12 +119,15 @@ class RealTimeLoop:
         max_score = result.max_score
         self._similarity_buffer.append(max_score)
 
+        # Track per-topic best score seen so far (for time-remaining open items)
+        for score_entry in result.scores:
+            prev = self._topic_max_scores.get(score_entry.topic, 0.0)
+            self._topic_max_scores[score_entry.topic] = max(prev, score_entry.score)
+
         # Keep only the last N windows
         window = self._cfg.off_track_consecutive_windows
         if len(self._similarity_buffer) > window:
             self._similarity_buffer = self._similarity_buffer[-window:]
-
-        elapsed_minutes = self._cfg.realtime_loop_interval_seconds * len(self._similarity_buffer) / 60
 
         # Off-track: all recent windows below threshold
         if (
@@ -167,7 +184,7 @@ class RealTimeLoop:
             return
 
         self._last_purpose_check = now
-        drifted = await self._recheck_purpose_drift()
+        drifted = self._recheck_purpose_drift()
         if drifted:
             self._purpose_divergence_ticks += 1
             drift_threshold = self._cfg.purpose_drift_consecutive_minutes * 60 / self._cfg.realtime_loop_interval_seconds
@@ -189,7 +206,7 @@ class RealTimeLoop:
             "mismatch": False,
         })
 
-    async def _recheck_purpose_drift(self) -> bool:
+    def _recheck_purpose_drift(self) -> bool:
         """Returns True if purpose appears to have drifted (stub — real impl calls LLM)."""
         logger.debug("Purpose drift re-check for meeting %s", self._meeting_id)
         return False
@@ -198,7 +215,7 @@ class RealTimeLoop:
     # 3. Tone monitoring
     # ------------------------------------------------------------------
 
-    async def _check_tone(self) -> None:
+    def _check_tone(self) -> None:
         """
         Tone analysis stub — real implementation would call an LLM with the
         recent transcript window and parse tone issues from the response.
@@ -261,8 +278,61 @@ class RealTimeLoop:
             logger.warning("Participation pulse failed for %s: %s", self._meeting_id, exc)
 
     # ------------------------------------------------------------------
-    # Alert helpers
+    # 5. Time remaining — wrap-up alert
     # ------------------------------------------------------------------
+
+    async def _check_time_remaining(self) -> None:
+        """
+        When the meeting is within `time_remaining_alert_minutes` of its
+        scheduled end, send a single alert listing:
+          - Agenda topics not yet covered (similarity never exceeded threshold)
+          - A note to resolve open items before time is up
+        Fires once per meeting only.
+        """
+        if self._time_remaining_sent or self._scheduled_end is None:
+            return
+
+        now_utc = datetime.now(timezone.utc)
+        remaining_seconds = (self._scheduled_end - now_utc).total_seconds()
+        threshold_seconds = self._cfg.time_remaining_alert_minutes * 60
+
+        if remaining_seconds > threshold_seconds or remaining_seconds <= 0:
+            return
+
+        # Determine which agenda topics haven't been adequately covered
+        uncovered = [
+            topic for topic in self._agenda
+            if self._topic_max_scores.get(topic, 0.0) < self._cfg.off_track_similarity_threshold
+        ]
+
+        minutes_left = max(0, int(remaining_seconds // 60))
+        plural = "s" if minutes_left != 1 else ""
+
+        if uncovered:
+            message = (
+                f"About {minutes_left} minute{plural} remain. "
+                "Please focus on resolving the following open issues and next steps before time is up."
+            )
+        else:
+            message = (
+                f"About {minutes_left} minute{plural} remain. "
+                "Please wrap up any open action items before time is up."
+            )
+
+        card = {
+            "type": "time_remaining",
+            "meeting_id": self._meeting_id,
+            "minutes_remaining": minutes_left,
+            "uncovered_agenda_topics": uncovered,
+            "message": message,
+        }
+
+        await self._send_alert("time_remaining", card)
+        self._time_remaining_sent = True
+        logger.info(
+            "Time remaining alert sent for meeting %s — %d min left, %d uncovered topics",
+            self._meeting_id, minutes_left, len(uncovered),
+        )
 
     async def _send_throttled_alert(self, alert_type: str, card: dict) -> None:
         """Send alert only if outside the throttle window."""
@@ -289,3 +359,16 @@ class RealTimeLoop:
 def _utcnow() -> str:
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso(value: str | None) -> Optional[datetime]:
+    """Parse an ISO8601 string to a timezone-aware datetime. Returns None on failure."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, AttributeError):
+        return None
