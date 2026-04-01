@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meeting-local-agents"
+version = "0.1.0"
+description = "Local OpenAI-backed agents for development without Azure AI Foundry"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.30.0",
+    "meeting-shared-models",
+]
+
+[tool.setuptools.packages.find]
+include = ["local_agents*"]

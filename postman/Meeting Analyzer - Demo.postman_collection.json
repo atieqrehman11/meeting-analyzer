@@ -1,0 +1,1487 @@
+{
+  "info": {
+    "name": "Meeting Analyzer - Demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Full meeting scenario: Q3 Product Roadmap Planning (60 min, 4 participants). Run via Collection Runner in sequence. Requires ORCH_FOUNDRY_MODE=local (OpenAI) or ORCH_FOUNDRY_MODE=mock for canned responses."
+  },
+  "variable": [
+    {
+      "key": "mcp_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "bot_url",
+      "value": "http://localhost:3978"
+    }
+  ],
+  "item": [
+    {
+      "name": "Phase 1 - Start Meeting",
+      "item": [
+        {
+          "name": "01 - Bot Joins Meeting",
+          "request": {
+            "method": "POST",
+            "url": "{{bot_url}}/api/messages",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"conversationUpdate\",\n  \"id\": \"activity-001\",\n  \"timestamp\": \"2026-07-15T08:59:00Z\",\n  \"channelId\": \"msteams\",\n  \"from\": {\n    \"id\": \"sarah-pm\",\n    \"name\": \"Sarah Chen\"\n  },\n  \"recipient\": {\n    \"id\": \"bot-1\",\n    \"name\": \"MeetingBot\"\n  },\n  \"conversation\": {\n    \"id\": \"mtg-roadmap-q3\"\n  },\n  \"membersAdded\": [\n    {\n      \"id\": \"bot-1\",\n      \"name\": \"MeetingBot\"\n    },\n    {\n      \"id\": \"sarah-pm\",\n      \"name\": \"Sarah Chen\"\n    },\n    {\n      \"id\": \"james-eng\",\n      \"name\": \"James Okafor\"\n    },\n    {\n      \"id\": \"priya-des\",\n      \"name\": \"Priya Sharma\"\n    },\n    {\n      \"id\": \"tom-data\",\n      \"name\": \"Tom Reyes\"\n    }\n  ],\n  \"membersRemoved\": [],\n  \"channelData\": {\n    \"meeting\": {\n      \"id\": \"mtg-roadmap-q3\"\n    },\n    \"participants\": [\n      {\n        \"id\": \"sarah-pm\",\n        \"name\": \"Sarah Chen\",\n        \"tenantId\": \"t-1\",\n        \"role\": \"organizer\"\n      },\n      {\n        \"id\": \"james-eng\",\n        \"name\": \"James Okafor\",\n        \"tenantId\": \"t-1\",\n        \"role\": \"presenter\"\n      },\n      {\n        \"id\": \"priya-des\",\n        \"name\": \"Priya Sharma\",\n        \"tenantId\": \"t-1\",\n        \"role\": \"attendee\"\n      },\n      {\n        \"id\": \"tom-data\",\n        \"name\": \"Tom Reyes\",\n        \"tenantId\": \"t-1\",\n        \"role\": \"attendee\"\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 2 - Store Meeting Record",
+      "item": [
+        {
+          "name": "02 - Store Meeting Record",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/meeting/store_meeting_record",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_record\": {\n    \"id\": \"meeting_mtg-roadmap-q3\",\n    \"type\": \"meeting\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"organizer_id\": \"sarah-pm\",\n    \"organizer_name\": \"Sarah Chen\",\n    \"subject\": \"Q3 Product Roadmap Planning\",\n    \"start_time\": \"2026-07-15T09:00:00Z\",\n    \"end_time\": \"2026-07-15T10:00:00Z\",\n    \"duration_minutes\": 60.0,\n    \"participants\": [\n      \"sarah-pm\",\n      \"james-eng\",\n      \"priya-des\",\n      \"tom-data\"\n    ],\n    \"stage\": \"transcribing\",\n    \"created_at\": \"2026-07-15T08:55:00Z\",\n    \"updated_at\": \"2026-07-15T08:55:00Z\",\n    \"azure_region\": \"eastus\",\n    \"retention_expires_at\": \"2026-10-15T00:00:00Z\",\n    \"recording_enabled\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 3 - Consent (all 4 participants)",
+      "item": [
+        {
+          "name": "03 - Consent Granted: Sarah Chen",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/consent/store_consent_record",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_record\": {\n    \"id\": \"consent_mtg-roadmap-q3_sarah-pm\",\n    \"type\": \"consent\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"decision\": \"granted\",\n    \"timestamp\": \"2026-07-15T09:00:10Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Consent Granted: James Okafor",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/consent/store_consent_record",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_record\": {\n    \"id\": \"consent_mtg-roadmap-q3_james-eng\",\n    \"type\": \"consent\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"decision\": \"granted\",\n    \"timestamp\": \"2026-07-15T09:00:15Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Consent Granted: Priya Sharma",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/consent/store_consent_record",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_record\": {\n    \"id\": \"consent_mtg-roadmap-q3_priya-des\",\n    \"type\": \"consent\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"decision\": \"granted\",\n    \"timestamp\": \"2026-07-15T09:00:20Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Consent Granted: Tom Reyes",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/consent/store_consent_record",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_record\": {\n    \"id\": \"consent_mtg-roadmap-q3_tom-data\",\n    \"type\": \"consent\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"decision\": \"granted\",\n    \"timestamp\": \"2026-07-15T09:00:25Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 4 - Transcript (28 segments)",
+      "item": [
+        {
+          "name": "Seg 01 [Sarah Chen]: Good morning everyone. Let's get started \u2014 we have a lot to ...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_1\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 1,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"Good morning everyone. Let's get started \\u2014 we have a lot to cover today. The goal is to lock down our Q3 roadmap priorities and make sure engineering and design are aligned before we go to stakeholders on Friday.\",\n    \"start_time\": \"2026-07-15T09:00:00Z\",\n    \"end_time\": \"2026-07-15T09:00:22Z\",\n    \"duration_seconds\": 22.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 02 [James Okafor]: Morning Sarah. I've reviewed the backlog items. Ready when y...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_2\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 2,\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"text\": \"Morning Sarah. I've reviewed the backlog items. Ready when you are.\",\n    \"start_time\": \"2026-07-15T09:00:25Z\",\n    \"end_time\": \"2026-07-15T09:00:38Z\",\n    \"duration_seconds\": 13.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 03 [Priya Sharma]: Hi all. I've got the design concepts ready to walk through f...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_3\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 3,\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"text\": \"Hi all. I've got the design concepts ready to walk through for the top three features.\",\n    \"start_time\": \"2026-07-15T09:00:40Z\",\n    \"end_time\": \"2026-07-15T09:00:52Z\",\n    \"duration_seconds\": 12.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 04 [Tom Reyes]: Morning. I pulled the usage data from last quarter \u2014 it shou...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_4\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 4,\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"text\": \"Morning. I pulled the usage data from last quarter \\u2014 it should help us prioritise. I'll share my screen when we get to that section.\",\n    \"start_time\": \"2026-07-15T09:00:54Z\",\n    \"end_time\": \"2026-07-15T09:01:10Z\",\n    \"duration_seconds\": 16.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 05 [Sarah Chen]: Okay, first item \u2014 Q3 feature prioritisation. Based on custo...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_5\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 5,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"Okay, first item \\u2014 Q3 feature prioritisation. Based on customer feedback and the OKRs, I'm proposing we focus on three things: the real-time collaboration module, the analytics dashboard redesign, and the mobile offline mode. Tom, can you walk us through the usage data to validate these?\",\n    \"start_time\": \"2026-07-15T09:01:15Z\",\n    \"end_time\": \"2026-07-15T09:02:10Z\",\n    \"duration_seconds\": 55.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 06 [Tom Reyes]: Sure. So looking at Q2 data \u2014 the collaboration features had...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_6\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 6,\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"text\": \"Sure. So looking at Q2 data \\u2014 the collaboration features had a 34% drop-off rate at the point where users try to co-edit. That's our biggest pain point. The analytics dashboard has a 12% weekly active usage rate which is low for a core feature \\u2014 users are telling us it's too complex. Mobile offline mode is requested by 67% of our enterprise customers in the last NPS survey. So all three of Sarah's picks are data-backed.\",\n    \"start_time\": \"2026-07-15T09:02:15Z\",\n    \"end_time\": \"2026-07-15T09:03:45Z\",\n    \"duration_seconds\": 90.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 07 [James Okafor]: The collaboration module is the most complex technically. We...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_7\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 7,\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"text\": \"The collaboration module is the most complex technically. We're talking about operational transformation or CRDT-based conflict resolution \\u2014 that's a significant architecture change. I'd estimate 8 to 10 weeks for a solid implementation. The analytics dashboard is more straightforward \\u2014 maybe 4 weeks if we scope it right. Mobile offline is somewhere in between, around 6 weeks, but it has dependencies on the sync service.\",\n    \"start_time\": \"2026-07-15T09:03:50Z\",\n    \"end_time\": \"2026-07-15T09:05:00Z\",\n    \"duration_seconds\": 70.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 08 [Priya Sharma]: From a design perspective, the analytics dashboard is actual...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_8\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 8,\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"text\": \"From a design perspective, the analytics dashboard is actually the most ready \\u2014 I have high-fidelity mockups done. The collaboration module needs a full UX rethink because the current mental model is confusing. I'd need at least 3 weeks of design work before engineering can start on that one.\",\n    \"start_time\": \"2026-07-15T09:05:05Z\",\n    \"end_time\": \"2026-07-15T09:06:00Z\",\n    \"duration_seconds\": 55.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 09 [Sarah Chen]: So it sounds like the analytics dashboard is our quick win \u2014...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_9\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 9,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"So it sounds like the analytics dashboard is our quick win \\u2014 design is ready, engineering estimate is manageable. I'd like to propose we make that our P1 for Q3, start the collaboration module design sprint in parallel, and push mobile offline to Q4 unless we can find a way to reduce the scope. Does anyone disagree?\",\n    \"start_time\": \"2026-07-15T09:06:05Z\",\n    \"end_time\": \"2026-07-15T09:06:50Z\",\n    \"duration_seconds\": 45.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 10 [James Okafor]: I'd push back slightly on pushing mobile offline to Q4. We h...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_10\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 10,\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"text\": \"I'd push back slightly on pushing mobile offline to Q4. We have three enterprise contracts that are contingent on that feature. Losing those deals would hurt more than the engineering cost. Can we do a reduced scope \\u2014 read-only offline mode first?\",\n    \"start_time\": \"2026-07-15T09:06:55Z\",\n    \"end_time\": \"2026-07-15T09:07:30Z\",\n    \"duration_seconds\": 35.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 11 [Tom Reyes]: The enterprise customers specifically asked for read-write o...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_11\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 11,\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"text\": \"The enterprise customers specifically asked for read-write offline. Read-only might not satisfy the contract terms.\",\n    \"start_time\": \"2026-07-15T09:07:35Z\",\n    \"end_time\": \"2026-07-15T09:07:55Z\",\n    \"duration_seconds\": 20.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 12 [Sarah Chen]: Okay, let's keep mobile offline in Q3 but descope to the mos...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_12\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 12,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"Okay, let's keep mobile offline in Q3 but descope to the most critical user flows. James, can you work with the enterprise team to define the minimum viable offline scope by end of week? That becomes an action item.\",\n    \"start_time\": \"2026-07-15T09:08:00Z\",\n    \"end_time\": \"2026-07-15T09:08:40Z\",\n    \"duration_seconds\": 40.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 13 [James Okafor]: Agreed. I'll set up a call with Marcus from enterprise sales...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_13\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 13,\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"text\": \"Agreed. I'll set up a call with Marcus from enterprise sales tomorrow.\",\n    \"start_time\": \"2026-07-15T09:08:45Z\",\n    \"end_time\": \"2026-07-15T09:08:55Z\",\n    \"duration_seconds\": 10.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 14 [Sarah Chen]: Good. Moving to item two \u2014 technical feasibility. James, you...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_14\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 14,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"Good. Moving to item two \\u2014 technical feasibility. James, you flagged some infrastructure concerns in the pre-read.\",\n    \"start_time\": \"2026-07-15T09:09:00Z\",\n    \"end_time\": \"2026-07-15T09:09:20Z\",\n    \"duration_seconds\": 20.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 15 [James Okafor]: Yes. The main concern is our current WebSocket infrastructur...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_15\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 15,\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"text\": \"Yes. The main concern is our current WebSocket infrastructure won't scale to support real-time collaboration for our enterprise tier \\u2014 we're talking about rooms with up to 200 concurrent editors. We'd need to migrate to a dedicated presence service, probably using Redis pub-sub. That's not in the current Q3 budget. I've drafted a proposal for a phased approach \\u2014 start with a 20-user limit in Q3, scale in Q4 once we've secured the infrastructure budget. I've shared the doc in the channel.\",\n    \"start_time\": \"2026-07-15T09:09:25Z\",\n    \"end_time\": \"2026-07-15T09:11:00Z\",\n    \"duration_seconds\": 95.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 16 [Priya Sharma]: The 20-user limit is actually fine for our initial target se...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_16\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 16,\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"text\": \"The 20-user limit is actually fine for our initial target segment \\u2014 SMBs. Enterprise collaboration is a Q4 story anyway based on our go-to-market plan. I think the phased approach makes sense.\",\n    \"start_time\": \"2026-07-15T09:11:05Z\",\n    \"end_time\": \"2026-07-15T09:11:45Z\",\n    \"duration_seconds\": 40.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 17 [Tom Reyes]: Agreed. And honestly 80% of our active collaboration session...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_17\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 17,\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"text\": \"Agreed. And honestly 80% of our active collaboration sessions have fewer than 10 participants. The 20-user cap covers the vast majority of real usage.\",\n    \"start_time\": \"2026-07-15T09:11:50Z\",\n    \"end_time\": \"2026-07-15T09:12:20Z\",\n    \"duration_seconds\": 30.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 18 [James Okafor]: Quick side note \u2014 has anyone heard anything about the team o...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_18\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 18,\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"text\": \"Quick side note \\u2014 has anyone heard anything about the team offsite? I know it's off-topic but people keep asking me and I don't have an answer.\",\n    \"start_time\": \"2026-07-15T09:12:25Z\",\n    \"end_time\": \"2026-07-15T09:12:55Z\",\n    \"duration_seconds\": 30.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 19 [Sarah Chen]: Let's park that \u2014 I'll send a separate note. Back to the roa...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_19\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 19,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"Let's park that \\u2014 I'll send a separate note. Back to the roadmap.\",\n    \"start_time\": \"2026-07-15T09:13:00Z\",\n    \"end_time\": \"2026-07-15T09:13:20Z\",\n    \"duration_seconds\": 20.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 20 [Priya Sharma]: For the analytics dashboard redesign, I want to walk through...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_20\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 20,\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"text\": \"For the analytics dashboard redesign, I want to walk through the three core changes. First, we're replacing the current widget-based layout with a guided insights view \\u2014 the data shows users don't know where to start. Second, we're adding a natural language query bar so users can ask questions like 'show me churn by region last month'. Third, we're introducing saved views so teams can share their dashboards. Tom, I'd love your input on the NLQ feature \\u2014 is the data model ready to support that?\",\n    \"start_time\": \"2026-07-15T09:13:25Z\",\n    \"end_time\": \"2026-07-15T09:15:00Z\",\n    \"duration_seconds\": 95.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 21 [Tom Reyes]: The data model can support it but we'd need to build a query...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_21\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 21,\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"text\": \"The data model can support it but we'd need to build a query translation layer. I'd estimate 2 weeks of data engineering work. The risk is accuracy \\u2014 NLQ on complex metrics can give misleading results if the translation is off. I'd recommend we scope it to a fixed set of supported query patterns for V1 rather than open-ended natural language.\",\n    \"start_time\": \"2026-07-15T09:15:05Z\",\n    \"end_time\": \"2026-07-15T09:16:00Z\",\n    \"duration_seconds\": 55.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 22 [Priya Sharma]: That's a fair constraint. I can design around a curated quer...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_22\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 22,\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"text\": \"That's a fair constraint. I can design around a curated query library \\u2014 maybe 20 to 30 common patterns. That actually makes the UX cleaner too.\",\n    \"start_time\": \"2026-07-15T09:16:05Z\",\n    \"end_time\": \"2026-07-15T09:16:40Z\",\n    \"duration_seconds\": 35.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 23 [Sarah Chen]: I love that direction. Priya, can you put together a list of...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_23\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 23,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"I love that direction. Priya, can you put together a list of the top 25 query patterns based on what customers actually ask in support tickets? Tom can validate them against the data model. Let's make that an action item with a deadline of next Wednesday.\",\n    \"start_time\": \"2026-07-15T09:16:45Z\",\n    \"end_time\": \"2026-07-15T09:17:30Z\",\n    \"duration_seconds\": 45.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 24 [Priya Sharma]: Will do. I'll pull the support ticket analysis and have a dr...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_24\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 24,\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"text\": \"Will do. I'll pull the support ticket analysis and have a draft by Tuesday so Tom has time to review.\",\n    \"start_time\": \"2026-07-15T09:17:35Z\",\n    \"end_time\": \"2026-07-15T09:17:45Z\",\n    \"duration_seconds\": 10.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 25 [Tom Reyes]: Works for me.",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_25\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 25,\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"text\": \"Works for me.\",\n    \"start_time\": \"2026-07-15T09:17:50Z\",\n    \"end_time\": \"2026-07-15T09:18:00Z\",\n    \"duration_seconds\": 10.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 26 [Sarah Chen]: Great. Let me summarise the decisions and action items. Deci...",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_26\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 26,\n    \"participant_id\": \"sarah-pm\",\n    \"participant_name\": \"Sarah Chen\",\n    \"text\": \"Great. Let me summarise the decisions and action items. Decisions: analytics dashboard is P1 for Q3, collaboration module starts with design sprint this sprint, mobile offline stays in Q3 with reduced scope, phased infrastructure approach approved for collaboration. Action items: James to define minimum viable offline scope with enterprise team by Friday, Priya to draft top 25 NLQ patterns by Tuesday, Tom to validate query patterns against data model by Wednesday. Any final questions?\",\n    \"start_time\": \"2026-07-15T09:18:05Z\",\n    \"end_time\": \"2026-07-15T09:19:00Z\",\n    \"duration_seconds\": 55.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 27 [James Okafor]: No, that's clear. Thanks Sarah.",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_27\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 27,\n    \"participant_id\": \"james-eng\",\n    \"participant_name\": \"James Okafor\",\n    \"text\": \"No, that's clear. Thanks Sarah.\",\n    \"start_time\": \"2026-07-15T09:19:05Z\",\n    \"end_time\": \"2026-07-15T09:19:15Z\",\n    \"duration_seconds\": 10.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 28 [Priya Sharma]: All good. Thanks everyone.",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_28\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 28,\n    \"participant_id\": \"priya-des\",\n    \"participant_name\": \"Priya Sharma\",\n    \"text\": \"All good. Thanks everyone.\",\n    \"start_time\": \"2026-07-15T09:19:17Z\",\n    \"end_time\": \"2026-07-15T09:19:25Z\",\n    \"duration_seconds\": 8.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seg 29 [Tom Reyes]: Thanks. Talk soon.",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/transcript/store_transcript_segment",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segment\": {\n    \"id\": \"seg_mtg-roadmap-q3_29\",\n    \"type\": \"transcript_segment\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"sequence\": 29,\n    \"participant_id\": \"tom-data\",\n    \"participant_name\": \"Tom Reyes\",\n    \"text\": \"Thanks. Talk soon.\",\n    \"start_time\": \"2026-07-15T09:19:27Z\",\n    \"end_time\": \"2026-07-15T09:19:35Z\",\n    \"duration_seconds\": 8.0,\n    \"consent_verified\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 5 - Realtime Monitoring",
+      "item": [
+        {
+          "name": "Similarity Check - Mid Meeting",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/similarity/compute_similarity",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Good morning everyone. Let's get started \\u2014 we have a lot to cover today. The goal is to lock down our Q3 roadmap priorities and make sure engineering and design are aligned before we go to stakeholders on Friday. Morning Sarah. I've reviewed the backlog items. Ready when you are. Hi all. I've got the design concepts ready to walk through for the top three features. Morning. I pulled the usage data from last quarter \\u2014 it should help us prioritise. I'll share my screen when we get to that section. Okay, first item \\u2014 Q3 feature prioritisation. Based on customer feedback and the OKRs, I'm proposing we focus on three things: the real-time collaboration module, the analytics dashboard redesign, and the mobile offline mode. Tom, can you walk us through the usage data to validate these? Sure. So looking at Q2 data \\u2014 the collaboration features had a 34% drop-off rate at the point where users try to co-edit. That's our biggest pain point. The analytics dashboard has a 12% weekly active usage rate which is low for a core feature \\u2014 users are telling us it's too complex. Mobile offline mode is requested by 67% of our enterprise customers in the last NPS survey. So all three of Sarah's picks are data-backed. The collaboration module is the most complex technically. We're talking about operational transformation or CRDT-based conflict resolution \\u2014 that's a significant architecture change. I'd estimate 8 to 10 weeks for a solid implementation. The analytics dashboard is more straightforward \\u2014 maybe 4 weeks if we scope it right. Mobile offline is somewhere in between, around 6 weeks, but it has dependencies on the sync service. From a design perspective, the analytics dashboard is actually the most ready \\u2014 I have high-fidelity mockups done. The collaboration module needs a full UX rethink because the current mental model is confusing. I'd need at least 3 weeks of design work before engineering can start on that one. So it sounds like the analytics dashboard is our quick win \\u2014 design\",\n  \"agenda_topics\": [\n    \"Q3 Feature Prioritisation\",\n    \"Technical Feasibility Review\",\n    \"Design and UX Alignment\"\n  ],\n  \"meeting_id\": \"mtg-roadmap-q3\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('scores length matches agenda', () => pm.expect(b.scores).to.have.lengthOf(3));",
+                  "pm.test('max_score in range', () => pm.expect(b.max_score).to.be.within(0, 1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cost Snapshot - 15 min",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/store_cost_snapshot",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"snapshot\": {\n    \"id\": \"cost_mtg-roadmap-q3_0\",\n    \"type\": \"cost_snapshot\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"snapshot_index\": 0,\n    \"captured_at\": \"2026-07-15T09:15:00Z\",\n    \"elapsed_minutes\": 15.0,\n    \"active_participant_count\": 4,\n    \"total_cost\": 125.0,\n    \"currency\": \"USD\",\n    \"per_participant\": [\n      {\n        \"participant_id\": \"sarah-pm\",\n        \"participant_name\": \"Sarah Chen\",\n        \"hourly_rate\": 150.0,\n        \"elapsed_cost\": 37.5\n      },\n      {\n        \"participant_id\": \"james-eng\",\n        \"participant_name\": \"James Okafor\",\n        \"hourly_rate\": 175.0,\n        \"elapsed_cost\": 37.5\n      },\n      {\n        \"participant_id\": \"priya-des\",\n        \"participant_name\": \"Priya Sharma\",\n        \"hourly_rate\": 140.0,\n        \"elapsed_cost\": 25.0\n      },\n      {\n        \"participant_id\": \"tom-data\",\n        \"participant_name\": \"Tom Reyes\",\n        \"hourly_rate\": 130.0,\n        \"elapsed_cost\": 25.0\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cost Snapshot - 30 min",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/store_cost_snapshot",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"snapshot\": {\n    \"id\": \"cost_mtg-roadmap-q3_1\",\n    \"type\": \"cost_snapshot\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"snapshot_index\": 1,\n    \"captured_at\": \"2026-07-15T09:30:00Z\",\n    \"elapsed_minutes\": 30.0,\n    \"active_participant_count\": 4,\n    \"total_cost\": 250.0,\n    \"currency\": \"USD\",\n    \"per_participant\": [\n      {\n        \"participant_id\": \"sarah-pm\",\n        \"participant_name\": \"Sarah Chen\",\n        \"hourly_rate\": 150.0,\n        \"elapsed_cost\": 75.0\n      },\n      {\n        \"participant_id\": \"james-eng\",\n        \"participant_name\": \"James Okafor\",\n        \"hourly_rate\": 175.0,\n        \"elapsed_cost\": 75.0\n      },\n      {\n        \"participant_id\": \"priya-des\",\n        \"participant_name\": \"Priya Sharma\",\n        \"hourly_rate\": 140.0,\n        \"elapsed_cost\": 50.0\n      },\n      {\n        \"participant_id\": \"tom-data\",\n        \"participant_name\": \"Tom Reyes\",\n        \"hourly_rate\": 130.0,\n        \"elapsed_cost\": 50.0\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cost Snapshot - 45 min",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/store_cost_snapshot",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"snapshot\": {\n    \"id\": \"cost_mtg-roadmap-q3_2\",\n    \"type\": \"cost_snapshot\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"snapshot_index\": 2,\n    \"captured_at\": \"2026-07-15T09:45:00Z\",\n    \"elapsed_minutes\": 45.0,\n    \"active_participant_count\": 4,\n    \"total_cost\": 375.0,\n    \"currency\": \"USD\",\n    \"per_participant\": [\n      {\n        \"participant_id\": \"sarah-pm\",\n        \"participant_name\": \"Sarah Chen\",\n        \"hourly_rate\": 150.0,\n        \"elapsed_cost\": 112.5\n      },\n      {\n        \"participant_id\": \"james-eng\",\n        \"participant_name\": \"James Okafor\",\n        \"hourly_rate\": 175.0,\n        \"elapsed_cost\": 112.5\n      },\n      {\n        \"participant_id\": \"priya-des\",\n        \"participant_name\": \"Priya Sharma\",\n        \"hourly_rate\": 140.0,\n        \"elapsed_cost\": 75.0\n      },\n      {\n        \"participant_id\": \"tom-data\",\n        \"participant_name\": \"Tom Reyes\",\n        \"hourly_rate\": 130.0,\n        \"elapsed_cost\": 75.0\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Realtime Alert - Off Track (offsite tangent)",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/realtime/send_realtime_alert",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"mtg-roadmap-q3\",\n  \"alert_type\": \"off_track\",\n  \"card_payload\": {\n    \"type\": \"off_track\",\n    \"meeting_id\": \"mtg-roadmap-q3\",\n    \"message\": \"Discussion appears to have moved off agenda\",\n    \"max_similarity\": 0.08\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 6 - End Meeting",
+      "item": [
+        {
+          "name": "Bot Leaves Meeting - Triggers Analysis Pipeline",
+          "request": {
+            "method": "POST",
+            "url": "{{bot_url}}/api/messages",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"conversationUpdate\",\n  \"id\": \"activity-002\",\n  \"timestamp\": \"2026-07-15T09:20:00Z\",\n  \"channelId\": \"msteams\",\n  \"from\": {\n    \"id\": \"sarah-pm\",\n    \"name\": \"Sarah Chen\"\n  },\n  \"recipient\": {\n    \"id\": \"bot-1\",\n    \"name\": \"MeetingBot\"\n  },\n  \"conversation\": {\n    \"id\": \"mtg-roadmap-q3\"\n  },\n  \"membersAdded\": [],\n  \"membersRemoved\": [\n    {\n      \"id\": \"bot-1\",\n      \"name\": \"MeetingBot\"\n    }\n  ],\n  \"channelData\": {\n    \"meeting\": {\n      \"id\": \"mtg-roadmap-q3\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 7 - Verify Analysis Report",
+      "item": [
+        {
+          "name": "Get Analysis Report",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/analysis/get_analysis_report",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"mtg-roadmap-q3\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('meeting_id matches', () => pm.expect(b.meeting_id).to.eql('mtg-roadmap-q3'));",
+                  "pm.test('agenda present', () => pm.expect(b.agenda).to.be.an('array'));",
+                  "pm.test('generated_at set', () => pm.expect(b.generated_at).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 8 - Action Item Poll",
+      "item": [
+        {
+          "name": "Create Action Item Poll",
+          "request": {
+            "method": "POST",
+            "url": "{{mcp_url}}/v1/tools/poll/create_poll",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"mtg-roadmap-q3\",\n  \"action_items\": [\n    {\n      \"id\": \"action_mtg-roadmap-q3_1\",\n      \"type\": \"action_item\",\n      \"meeting_id\": \"mtg-roadmap-q3\",\n      \"sequence\": 1,\n      \"description\": \"Define minimum viable offline scope with enterprise team\",\n      \"owner_participant_id\": \"james-eng\",\n      \"owner_name\": \"James Okafor\",\n      \"due_date\": \"2026-07-18\",\n      \"transcript_timestamp\": \"2026-07-15T09:08:00Z\",\n      \"status\": \"Confirmed\"\n    },\n    {\n      \"id\": \"action_mtg-roadmap-q3_2\",\n      \"type\": \"action_item\",\n      \"meeting_id\": \"mtg-roadmap-q3\",\n      \"sequence\": 2,\n      \"description\": \"Draft top 25 NLQ query patterns from support tickets\",\n      \"owner_participant_id\": \"priya-des\",\n      \"owner_name\": \"Priya Sharma\",\n      \"due_date\": \"2026-07-22\",\n      \"transcript_timestamp\": \"2026-07-15T09:16:45Z\",\n      \"status\": \"Confirmed\"\n    },\n    {\n      \"id\": \"action_mtg-roadmap-q3_3\",\n      \"type\": \"action_item\",\n      \"meeting_id\": \"mtg-roadmap-q3\",\n      \"sequence\": 3,\n      \"description\": \"Validate NLQ query patterns against data model\",\n      \"owner_participant_id\": \"tom-data\",\n      \"owner_name\": \"Tom Reyes\",\n      \"due_date\": \"2026-07-23\",\n      \"transcript_timestamp\": \"2026-07-15T09:16:45Z\",\n      \"status\": \"Proposed\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('poll_id returned', () => pm.expect(b.poll_id).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

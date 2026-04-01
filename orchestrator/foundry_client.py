@@ -18,11 +18,18 @@ _AGENT_IDS_FILE = Path(__file__).parent / "agent_ids.json"
 
 def build_foundry_client(config: OrchestratorConfig) -> "FoundryClient | MockFoundryClient":
     """Construct a FoundryClient from the given config.
-    Returns MockFoundryClient when ORCH_FOUNDRY_MODE=mock (local dev).
+    Returns MockFoundryClient when ORCH_FOUNDRY_MODE=mock (local dev, no OpenAI).
+    Returns LocalFoundryClient when ORCH_FOUNDRY_MODE=local (local dev with OpenAI).
+    Returns FoundryClient when ORCH_FOUNDRY_MODE=azure (production).
     """
     if config.foundry_mode == "mock":
         logger.info("Foundry running in mock mode — agent calls return canned responses")
         return MockFoundryClient()
+
+    if config.foundry_mode == "local":
+        logger.info("Foundry running in local mode — agent calls use OpenAI")
+        from local_agents.dispatcher import LocalFoundryClient
+        return LocalFoundryClient()
 
     try:
         AIProjectClient = importlib.import_module("azure.ai.projects").AIProjectClient
