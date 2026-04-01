@@ -15,10 +15,13 @@ def _assert_error_envelope(body: dict) -> None:
 
 
 def test_consent_required_error_envelope(client):
-    """CONSENT_REQUIRED error must conform to the MCP error contract."""
+    """CONSENT_REQUIRED error must conform to the MCP error contract when consent is enforced."""
+    from unittest.mock import patch
     from .conftest import transcript_segment
-    r = client.post("/v1/tools/transcript/store_transcript_segment",
-                    json=transcript_segment(consent_verified=False))
+    with patch("app.api.v1.tools.transcript.settings") as mock_settings:
+        mock_settings.consent_required = True
+        r = client.post("/v1/tools/transcript/store_transcript_segment",
+                        json=transcript_segment(consent_verified=False))
     assert r.status_code == 400
     _assert_error_envelope(r.json())
     assert r.json()["error"]["retryable"] is False

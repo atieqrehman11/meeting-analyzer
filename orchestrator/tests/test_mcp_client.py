@@ -110,10 +110,13 @@ async def test_store_transcript_segment_consented(mcp: McpClient):
 
 @pytest.mark.anyio
 async def test_store_transcript_segment_no_consent_raises(mcp: McpClient):
+    from unittest.mock import patch
     seg = _segment()
     seg.consent_verified = False
-    with pytest.raises(McpCallError) as exc_info:
-        await mcp.store_transcript_segment(seg)
+    with patch("app.api.v1.tools.transcript.settings") as mock_settings:
+        mock_settings.consent_required = True
+        with pytest.raises(McpCallError) as exc_info:
+            await mcp.store_transcript_segment(seg)
     assert exc_info.value.code == "CONSENT_REQUIRED"
     assert exc_info.value.retryable is False
 
@@ -176,7 +179,8 @@ async def test_compute_similarity_empty_topics(mcp: McpClient):
 
 @pytest.mark.anyio
 async def test_non_retryable_error_raised_immediately(mcp: McpClient):
-    """CONSENT_REQUIRED is non-retryable — should raise on first attempt."""
+    """CONSENT_REQUIRED is non-retryable — should raise on first attempt with no retries."""
+    from unittest.mock import patch
     seg = _segment()
     seg.consent_verified = False
     call_count = 0
@@ -188,9 +192,11 @@ async def test_non_retryable_error_raised_immediately(mcp: McpClient):
         return await original_post(path, payload, **kwargs)
 
     mcp._post = counting_post
-    try:
-        with pytest.raises(McpCallError):
-            await mcp.store_transcript_segment(seg)
-        assert call_count == 1  # no retries for non-retryable
-    finally:
-        mcp._post = original_post
+    with patch("app.api.v1.tools.transcript.settings") as mock_settings:
+        mock_settings.consent_required = True
+        try:
+            with pytest.raises(McpCallError):
+                await mcp.store_transcript_segment(seg)
+            assert call_count == 1  # no retries for non-retryable
+        finally:
+            mcp._post = original_post

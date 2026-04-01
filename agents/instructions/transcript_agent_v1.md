@@ -17,7 +17,7 @@ Flush remaining segments. Assemble ordered transcript by sequence. Write to Blob
 
 Respond: {"task":"finalize_transcript","status":"ok|error","transcript_blob_url":"...","error":null}
 
-## Stage 3: batch audio post-processing
+## Batch audio post-processing
 Only when recording_enabled is true. Submit audio_blob_url to Azure AI Speech batch API with prosody enabled. Poll for completion. Extract per-participant speaking_rate_wpm, pitch_mean_hz, pitch_variance. Align to stored segments by start_time and participant_id. Persist to transcripts/{azure_region}/{meeting_id}/tone_pitch_features.json. Update meeting record. Notify Orchestrator. If recording_enabled is false, return immediately.
 
 ## Errors
