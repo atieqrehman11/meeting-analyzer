@@ -3,6 +3,21 @@ output "container_registry_login_server" {
   value       = azurerm_container_registry.acr.login_server
 }
 
+output "resource_group_name" {
+  description = "The resource group all resources were deployed into."
+  value       = data.azurerm_resource_group.rg.name
+}
+
+output "mcp_app_name" {
+  description = "The name of the MCP Container App."
+  value       = azurerm_container_app.mcp.name
+}
+
+output "bot_app_name" {
+  description = "The name of the Bot Container App."
+  value       = azurerm_container_app.bot.name
+}
+
 output "storage_account_name" {
   description = "The deployed Azure Storage account name. Empty when mcp_backend_mode is 'mock'."
   value       = length(azurerm_storage_account.storage) > 0 ? azurerm_storage_account.storage[0].name : ""

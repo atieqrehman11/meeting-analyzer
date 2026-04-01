@@ -289,18 +289,16 @@ case "${1:-help}" in
         exit "$overall_status"
         ;;
 
-    deploy:agents)
-        load_env
-        activate_venv
-        pip install -q azure-ai-projects azure-identity pyyaml
-        echo "Registering agents in Foundry (endpoint: ${AZURE_AI_PROJECT_ENDPOINT:-not set})..."
-        python3 deploy/register_agents.py
-        ;;
-
-    check:mcp)
-        load_env
-        echo "Checking MCP server reachability..."
-        python3 deploy/register_mcp.py
+    deploy:all|deploy:infra|deploy:rbac|deploy:agents|check:mcp|infra:apply)
+        # Delegate all deployment commands to deploy.sh
+        case "${1}" in
+            deploy:all)    DEPLOY_CMD="all" ;;
+            infra:apply)   DEPLOY_CMD="infra" ;;
+            deploy:rbac)   DEPLOY_CMD="rbac" ;;
+            check:mcp)     DEPLOY_CMD="check-mcp" ;;
+            deploy:agents) DEPLOY_CMD="agents" ;;
+        esac
+        exec "$REPO_ROOT/deploy.sh" "$DEPLOY_CMD" "${@:2}"
         ;;
 
     install)
@@ -312,6 +310,50 @@ case "${1:-help}" in
         pip install -q -e "$REPO_ROOT/mcp[dev]"
         pip install -q -e "$REPO_ROOT/team_bot[dev]"
         echo "All packages installed."
+        ;;
+
+    docker:build)
+        # Usage: ./manage.sh docker:build [--tag <tag>]
+        TAG="${3:-${DOCKER_TAG:-latest}}"
+        if [[ "${2:-}" == "--tag" ]]; then TAG="$3"; fi
+        echo ""
+        echo "Building Docker images (tag: ${TAG}) ..."
+        echo ""
+        docker build -f mcp/Dockerfile      -t "meeting-analyzer-mcp:${TAG}" .
+        docker build -f team_bot/Dockerfile -t "meeting-analyzer-bot:${TAG}" .
+        echo ""
+        echo "Built:"
+        echo "  meeting-analyzer-mcp:${TAG}"
+        echo "  meeting-analyzer-bot:${TAG}"
+        echo ""
+        ;;
+
+    docker:push)
+        # Usage: ./manage.sh docker:push [--tag <tag>]
+        # Reads ACR from terraform output unless ACR env var is set.
+        TAG="${3:-${DOCKER_TAG:-latest}}"
+        if [[ "${2:-}" == "--tag" ]]; then TAG="$3"; fi
+
+        if [ -z "${ACR:-}" ]; then
+            echo "Reading ACR login server from Terraform outputs..."
+            ACR=$(terraform -chdir=infra output -raw container_registry_login_server)
+        fi
+
+        echo ""
+        echo "Building and pushing images to ${ACR} (tag: ${TAG}) ..."
+        echo ""
+        docker build -f mcp/Dockerfile      -t "${ACR}/meeting-analyzer-mcp:${TAG}" .
+        docker build -f team_bot/Dockerfile -t "${ACR}/meeting-analyzer-bot:${TAG}" .
+
+        az acr login --name "${ACR%%.*}"
+        docker push "${ACR}/meeting-analyzer-mcp:${TAG}"
+        docker push "${ACR}/meeting-analyzer-bot:${TAG}"
+
+        echo ""
+        echo "Pushed:"
+        echo "  ${ACR}/meeting-analyzer-mcp:${TAG}"
+        echo "  ${ACR}/meeting-analyzer-bot:${TAG}"
+        echo ""
         ;;
 
     env:init)
@@ -336,16 +378,32 @@ case "${1:-help}" in
         echo "  test:team-bot   Run team bot tests"
         echo "  test           Run all tests"
         echo "  test:all       Run all tests"
+        echo "  docker:build/push  See deploy.sh for Docker image commands"
+        echo "  infra:apply     terraform init + apply"
+        echo "  deploy:rbac     Assign RBAC roles to Container App managed identities"
         echo "  deploy:agents   Register/update agents in Azure AI Foundry"
+        echo "  deploy:all      Run full Azure deployment sequence (steps 1-5)"
         echo "  check:mcp       Verify MCP server URL is reachable"
+        echo "  (all deploy commands delegate to deploy.sh)"
         echo "  install         Install all dependencies into .venv"
         echo "  env:init        Create .env from .env.example"
         echo "  help            Show this message"
         echo ""
-        echo "Quick start:"
+        echo "Quick start (local dev):"
         echo "  ./manage.sh env:init   # create .env"
         echo "  ./manage.sh all        # start MCP and bot on separate ports"
         echo "  ./manage.sh mcp        # start MCP server on :8000"
+        echo ""
+        echo "Deployment sequence (Azure):"
+        echo "  1. cp infra/terraform.tfvars.example infra/terraform.tfvars  # fill in values"
+        echo "  2. ./manage.sh deploy:all             # run full deployment end-to-end"
+        echo ""
+        echo "  Or step by step:"
+        echo "  2a. ./manage.sh infra:apply           # provision all Azure infra"
+        echo "  2b. ./manage.sh docker:push           # build + push images to ACR"
+        echo "  2c. ./manage.sh deploy:rbac           # assign RBAC to managed identities"
+        echo "  2d. ./manage.sh check:mcp             # verify MCP server is up"
+        echo "  2e. ./manage.sh deploy:agents         # register agents in AI Foundry"
         echo ""
         echo "Key env vars (set in .env or shell):"
         echo "  MCP_BACKEND_MODE=mock|azure     (default: mock)"
