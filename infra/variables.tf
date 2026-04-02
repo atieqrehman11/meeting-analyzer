@@ -48,13 +48,6 @@ variable "bot_log_level" {
   default = "INFO"
 }
 
-variable "azure_ai_project_endpoint" {
-  type        = string
-  default     = ""
-  sensitive   = true
-  description = "Azure AI Foundry project endpoint used by the orchestrator."
-}
-
 variable "graph_tenant_id" {
   type        = string
   default     = ""
@@ -82,4 +75,48 @@ variable "bot_secret_expiry_years" {
   type        = number
   default     = 1
   description = "Validity period in years for the bot client secret."
+}
+
+# ---------------------------------------------------------------------------
+# Azure AI Foundry
+# ---------------------------------------------------------------------------
+
+variable "foundry_model_name" {
+  type        = string
+  default     = "gpt-4o"
+  description = "Azure OpenAI model name to deploy (e.g. gpt-4o, gpt-4o-mini, gpt-4.1)."
+}
+
+variable "foundry_deployment_name" {
+  type        = string
+  default     = "gpt-4o-meeting-bot"
+  description = "Deployment name in Foundry. Must match the 'model' field in agents/definitions/*.yaml."
+
+  validation {
+    condition     = length(var.foundry_deployment_name) > 0
+    error_message = "foundry_deployment_name cannot be empty. It must match the 'model' field in agents/definitions/*.yaml."
+  }
+}
+
+variable "foundry_model_version" {
+  type        = string
+  default     = "2024-11-20"
+  description = "Model version to deploy. Check Azure OpenAI model availability for your region."
+}
+
+variable "foundry_model_sku" {
+  type        = string
+  default     = "GlobalStandard"
+  description = "Deployment SKU: Standard (single region) or GlobalStandard (routes across regions, better availability)."
+
+  validation {
+    condition     = contains(["Standard", "GlobalStandard"], var.foundry_model_sku)
+    error_message = "foundry_model_sku must be 'Standard' or 'GlobalStandard'."
+  }
+}
+
+variable "foundry_model_capacity" {
+  type        = number
+  default     = 10
+  description = "Token-per-minute capacity in thousands (e.g. 10 = 10K TPM). Increase for production."
 }

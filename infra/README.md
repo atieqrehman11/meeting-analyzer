@@ -32,6 +32,8 @@ az login
 az account set --subscription <subscription-id>
 ```
 
+> The identity running Terraform needs `Azure AI Account Owner` at the subscription scope to create the Foundry account and project. `Contributor` alone is not sufficient.
+
 ---
 
 ## What Terraform Provisions
@@ -47,6 +49,13 @@ All resources are created inside the resource group you supply. Names are auto-g
 | Cosmos DB (Serverless, SQL API) | Meeting data — partitioned by `/meeting_id` — **azure mode only** |
 | Container App — `*-mcp` | MCP server, port 8000, external ingress |
 | Container App — `*-bot` | Teams bot, port 3978, external ingress |
+| Azure AI Services account | Foundry resource — hosts the model deployment and project |
+| GPT-4o deployment (`gpt-4o-meeting-bot`) | Model used by all three agents |
+| Azure AI Foundry project | Scoped project — endpoint injected into bot Container App |
+
+> Foundry uses **Basic Setup** (platform-managed thread/file storage). No BYO Cosmos DB or Azure AI Search is needed. This is compatible with the `AIProjectClient` agents API used by the orchestrator.
+
+> GPT-4o availability varies by region. If `terraform apply` fails with a quota error, either request a quota increase in the Azure portal or set `foundry_model_sku = "GlobalStandard"` in `terraform.tfvars` which routes across regions.
 
 > Set `mcp_backend_mode = "mock"` to skip Storage and Cosmos DB entirely. The MCP Container App will start with `MCP_BACKEND_MODE=mock` and use in-memory data. Useful for dev/test deployments where you only need the bot and agents wired up.
 
@@ -64,6 +73,8 @@ After `terraform apply` these values are printed and needed in later steps:
 | `cosmosdb_endpoint` | Cosmos DB endpoint URL |
 | `mcp_server_url` | Public HTTPS URL of the MCP Container App |
 | `bot_base_url` | Public HTTPS URL of the Teams Bot Container App |
+| `azure_ai_project_endpoint` | Foundry project endpoint — auto-injected into bot, used by `deploy:agents` |
+| `foundry_deployment_name` | GPT-4o deployment name (`gpt-4o-meeting-bot`) |
 
 ---
 
@@ -78,13 +89,16 @@ cp infra/terraform.tfvars.example infra/terraform.tfvars
 Key values to set:
 
 ```hcl
-resource_group_name       = "your-existing-rg"
-environment_name          = "meeting-analyzer"
-mcp_backend_mode          = "mock"            # "mock" skips Storage & Cosmos, "azure" creates them
-acr_image_tag             = "latest"
-azure_ai_project_endpoint = "https://<account>.services.ai.azure.com/api/projects/<project>"
-graph_tenant_id           = "<aad-tenant-id>"
-graph_client_id           = "<aad-client-id>"
+resource_group_name  = "your-existing-rg"
+environment_name     = "meeting-analyzer"
+mcp_backend_mode     = "mock"       # "mock" skips Storage & Cosmos, "azure" creates them
+acr_image_tag        = "latest"
+graph_tenant_id      = "<aad-tenant-id>"
+graph_client_id      = "<aad-client-id>"
+
+# Azure AI Foundry
+foundry_model_version  = "2024-11-20"
+foundry_model_capacity = 10         # TPM in thousands — increase for production
 ```
 
 Then apply:

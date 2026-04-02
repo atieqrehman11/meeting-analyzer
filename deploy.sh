@@ -121,6 +121,20 @@ cmd_rbac() {
         --role "Azure AI Developer" \
         --scope "$scope_rg"
 
+    # Azure AI User on the Foundry account — required for Agent Service
+    # (threads, runs, messages). Terraform also sets this, but we assign
+    # here too so it works if foundry.tf is applied separately.
+    local foundry_account
+    foundry_account=$(az cognitiveservices account list -g "$rg" --query "[?kind=='AIServices'].name | [0]" -o tsv 2>/dev/null || true)
+    if [ -n "$foundry_account" ]; then
+        echo ">>> Azure AI User → Bot identity (Foundry account)"
+        az role assignment create \
+            --assignee "$bot_principal" \
+            --role "Azure AI User" \
+            --scope "${scope_rg}/providers/Microsoft.CognitiveServices/accounts/${foundry_account}" \
+            2>/dev/null || echo "    (already assigned — skipping)"
+    fi
+
     echo ""
     echo "RBAC assignments complete."
 }
@@ -137,12 +151,12 @@ cmd_check_mcp() {
 }
 
 cmd_agents() {
-    local endpoint="${AZURE_AI_PROJECT_ENDPOINT:-$(tf_output azure_ai_project_endpoint 2>/dev/null || true)}"
+    local endpoint="${AZURE_AI_PROJECT_ENDPOINT:-$(tf_output azure_ai_project_endpoint)}"
     local mcp_url="${MCP_SERVER_URL:-$(tf_output mcp_server_url)}"
 
     if [ -z "$endpoint" ]; then
-        echo "ERROR: AZURE_AI_PROJECT_ENDPOINT is not set."
-        echo "  Set it in your environment or in infra/terraform.tfvars."
+        echo "ERROR: Could not resolve AZURE_AI_PROJECT_ENDPOINT."
+        echo "  Ensure infra has been applied (foundry.tf provisions this automatically)."
         exit 1
     fi
 

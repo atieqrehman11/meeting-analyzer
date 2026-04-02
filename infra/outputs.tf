@@ -58,3 +58,18 @@ output "bot_messaging_endpoint" {
   description = "The messaging endpoint registered with Azure Bot Service."
   value       = local.bot_messaging_endpoint
 }
+
+output "foundry_account_endpoint" {
+  description = "The Azure AI Services (Foundry) account endpoint."
+  value       = local.foundry_account_endpoint
+}
+
+output "azure_ai_project_endpoint" {
+  description = "The Azure AI Foundry project endpoint — used by the orchestrator and deploy:agents."
+  value       = local.foundry_project_endpoint
+}
+
+output "foundry_deployment_name" {
+  description = "The GPT-4o model deployment name used by all agents."
+  value       = azapi_resource.foundry_gpt4o.name
+}
