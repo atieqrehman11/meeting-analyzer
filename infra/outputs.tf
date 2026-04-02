@@ -3,6 +3,21 @@ output "container_registry_login_server" {
   value       = azurerm_container_registry.acr.login_server
 }
 
+output "resource_group_name" {
+  description = "The resource group all resources were deployed into."
+  value       = data.azurerm_resource_group.rg.name
+}
+
+output "mcp_app_name" {
+  description = "The name of the MCP Container App."
+  value       = azurerm_container_app.mcp.name
+}
+
+output "bot_app_name" {
+  description = "The name of the Bot Container App."
+  value       = azurerm_container_app.bot.name
+}
+
 output "storage_account_name" {
   description = "The deployed Azure Storage account name. Empty when mcp_backend_mode is 'mock'."
   value       = length(azurerm_storage_account.storage) > 0 ? azurerm_storage_account.storage[0].name : ""
@@ -42,4 +57,19 @@ output "bot_app_password" {
 output "bot_messaging_endpoint" {
   description = "The messaging endpoint registered with Azure Bot Service."
   value       = local.bot_messaging_endpoint
+}
+
+output "foundry_account_endpoint" {
+  description = "The Azure AI Services (Foundry) account endpoint."
+  value       = local.foundry_account_endpoint
+}
+
+output "azure_ai_project_endpoint" {
+  description = "The Azure AI Foundry project endpoint — used by the orchestrator and deploy:agents."
+  value       = local.foundry_project_endpoint
+}
+
+output "foundry_deployment_name" {
+  description = "The GPT-4o model deployment name used by all agents."
+  value       = azapi_resource.foundry_gpt4o.name
 }

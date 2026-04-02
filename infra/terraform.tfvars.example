@@ -6,10 +6,18 @@ acr_image_tag             = "latest"
 cosmos_database_name      = "meeting-analysis"
 mcp_log_level             = "INFO"
 bot_log_level             = "INFO"
-azure_ai_project_endpoint = ""
 graph_tenant_id           = ""
 graph_client_id           = ""
 
 # Teams bot registration (teams.tf)
 bot_service_sku         = "F0"   # F0 for dev, S1 for production
 bot_secret_expiry_years = 1
+
+# Azure AI Foundry (foundry.tf)
+# foundry_model_name and foundry_deployment_name must stay in sync with
+# the 'model' field in agents/definitions/*.yaml
+foundry_model_name      = "gpt-4o"              # Azure OpenAI model name
+foundry_deployment_name = "gpt-4o-meeting-bot"  # must match agents/definitions/*.yaml
+foundry_model_version   = "2024-11-20"          # check availability for your region
+foundry_model_sku       = "GlobalStandard"      # GlobalStandard recommended — better quota availability
+foundry_model_capacity  = 10                    # TPM in thousands — increase for production

@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # Set to True to enforce per-participant consent before storing any transcript data.
     consent_required: bool = False
 
+    # Poll (Stage 3)
+    # When False (default), create_poll returns FEATURE_NOT_ENABLED.
+    # Set to True to enable action item poll delivery after meetings.
+    poll_enabled: bool = False
+
     model_config = {"env_prefix": "MCP_", "case_sensitive": False}
 
 

@@ -38,6 +38,9 @@ class OrchestratorConfig(BaseSettings):
     alert_throttle_window_seconds: int = 300
     specialist_agent_timeout_seconds: int = 120
 
+    # Time remaining wrap-up alert
+    time_remaining_alert_minutes: int = 5  # send alert when this many minutes remain
+
     # Logging
     log_level: str = "INFO"
 

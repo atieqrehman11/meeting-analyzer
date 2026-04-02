@@ -254,7 +254,7 @@ resource "azurerm_container_app" "bot" {
       }
       env {
         name  = "ORCH_AZURE_AI_PROJECT_ENDPOINT"
-        value = var.azure_ai_project_endpoint
+        value = local.foundry_project_endpoint
       }
       env {
         name  = "ORCH_MCP_SERVER_URL"
