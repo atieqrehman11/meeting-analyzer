@@ -22,8 +22,8 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  foundry_name    = "${local.normalized_name}ai${local.name_suffix}"
-  foundry_project = "${local.normalized_name}-project"
+  foundry_name    = "ais${local.slug}"                        # no dashes — subdomain constraint
+  foundry_project = "proj-${local.workload}-${local.env}"
 }
 
 # ---------------------------------------------------------------------------
@@ -123,9 +123,10 @@ resource "azapi_resource" "foundry_project" {
 #    role on the Foundry account so it can create threads, runs, and messages
 # ---------------------------------------------------------------------------
 resource "azurerm_role_assignment" "bot_foundry_user" {
+  count                = var.deploy_apps ? 1 : 0
   scope                = azapi_resource.foundry.id
   role_definition_name = "Azure AI User"
-  principal_id         = azurerm_container_app.bot.identity[0].principal_id
+  principal_id         = azurerm_container_app.bot[0].identity[0].principal_id
 
   depends_on = [azapi_resource.foundry_project]
 }

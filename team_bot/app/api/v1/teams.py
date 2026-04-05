@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings
 from botbuilder.schema import Activity
-from fastapi import APIRouter, Header, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from typing import Annotated, Any
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
-from typing import Any
 
 from team_bot.app.common.logger import logger
 from team_bot.app.config.settings import settings
@@ -50,7 +50,7 @@ class ActivityPayload(BaseModel):
     "content": {"application/json": {"schema": ActivityPayload.model_json_schema()}},
     "required": True,
 }})
-async def messages(request: Request, authorization: str | None = Header(default=None)) -> JSONResponse:
+async def messages(request: Request, authorization: Annotated[str | None, Header()] = None) -> JSONResponse:
     body = await request.json()
     activity = Activity().deserialize(body)
     auth_header = authorization or ""
@@ -65,7 +65,56 @@ async def messages(request: Request, authorization: str | None = Header(default=
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 
+@router.get("/api/graph/webhook")
+async def graph_webhook_validate(
+    validation_token: Annotated[str, Query(alias="validationToken")],
+) -> PlainTextResponse:
+    """
+    Graph subscription validation handshake.
+    When registering a new subscription, Graph sends a GET with ?validationToken=...
+    and expects it echoed back as plain text within 10 seconds.
+    """
+    logger.info("Graph webhook validation handshake received")
+    return PlainTextResponse(content=validation_token, status_code=200)
+
+
 @router.post("/api/graph/webhook")
-async def graph_webhook(payload: dict) -> dict[str, str]:
-    # TODO: implement Graph calendar event subscriptions and proactive join scheduling.
-    return {"status": "received"}
+async def graph_webhook_notify(request: Request) -> JSONResponse:
+    """
+    Graph change notification handler.
+    Called when a subscribed online meeting is created or updated.
+    Validates the clientState secret and triggers a proactive bot join.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON body")
+
+    notifications = body.get("value", [])
+    if not notifications:
+        return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"status": "accepted"})
+
+    for notification in notifications:
+        client_state = notification.get("clientState", "")
+        if client_state != settings.webhook_secret:
+            logger.warning("Graph notification rejected — clientState mismatch")
+            continue
+
+        resource_data = notification.get("resourceData") or {}
+        change_type = notification.get("changeType", "")
+        meeting_id = resource_data.get("id")
+
+        logger.info("Graph notification: changeType=%s meetingId=%s", change_type, meeting_id)
+
+        if not meeting_id:
+            logger.warning("Graph notification missing meeting id — skipping")
+            continue
+
+        from team_bot.main import graph_service  # noqa: PLC0415
+        if graph_service is not None:
+            service_url = notification.get("serviceUrl") or "https://smba.trafficmanager.net/teams/"
+            conversation_id = resource_data.get("chatInfo", {}).get("threadId") or meeting_id
+            await graph_service.proactive_join(meeting_id, service_url, conversation_id)
+
+    # Graph expects 202 — anything else triggers retries
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"status": "accepted"})

@@ -24,8 +24,13 @@ site/
 dist/
 build/
 
-.terraform
-.terraform.locl.hcl
+# Terraform — state and local config (never commit — contain plaintext secrets)
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.*.backup
+infra/terraform.tfvars
 
-.pytest_cache
-
+# Test cache
+**/.pytest_cache/

@@ -9,13 +9,13 @@ output "resource_group_name" {
 }
 
 output "mcp_app_name" {
-  description = "The name of the MCP Container App."
-  value       = azurerm_container_app.mcp.name
+  description = "The name of the MCP Container App. Empty before deploy_apps=true."
+  value       = length(azurerm_container_app.mcp) > 0 ? azurerm_container_app.mcp[0].name : ""
 }
 
 output "bot_app_name" {
-  description = "The name of the Bot Container App."
-  value       = azurerm_container_app.bot.name
+  description = "The name of the Bot Container App. Empty before deploy_apps=true."
+  value       = length(azurerm_container_app.bot) > 0 ? azurerm_container_app.bot[0].name : ""
 }
 
 output "storage_account_name" {
@@ -34,13 +34,13 @@ output "cosmosdb_endpoint" {
 }
 
 output "mcp_server_url" {
-  description = "The external URL for the MCP Container App."
-  value       = "https://${azurerm_container_app.mcp.latest_revision_fqdn}"
+  description = "The external URL for the MCP Container App. Empty before deploy_apps=true."
+  value       = length(azurerm_container_app.mcp) > 0 ? "https://${azurerm_container_app.mcp[0].ingress[0].fqdn}" : ""
 }
 
 output "bot_base_url" {
-  description = "The external URL for the Teams Bot Container App."
-  value       = "https://${azurerm_container_app.bot.latest_revision_fqdn}"
+  description = "The external URL for the Teams Bot Container App. Empty before deploy_apps=true."
+  value       = length(azurerm_container_app.bot) > 0 ? "https://${azurerm_container_app.bot[0].ingress[0].fqdn}" : ""
 }
 
 output "bot_app_id" {
@@ -55,8 +55,8 @@ output "bot_app_password" {
 }
 
 output "bot_messaging_endpoint" {
-  description = "The messaging endpoint registered with Azure Bot Service."
-  value       = local.bot_messaging_endpoint
+  description = "The messaging endpoint registered with Azure Bot Service. Empty before deploy_apps=true."
+  value       = var.deploy_apps ? "https://${azurerm_container_app.bot[0].latest_revision_fqdn}/api/messages" : ""
 }
 
 output "foundry_account_endpoint" {

@@ -138,7 +138,7 @@ convert -size 32x32 xc:white teams-app/outline.png
 
 ```bash
 cd teams-app
-zip ../teams-app.zip manifest.json color.png outline.png
+zip ../teams.zip manifest.json color.png outline.png
 cd ..
 ```
 

@@ -14,16 +14,44 @@ variable "resource_group_name" {
   description = "The existing Azure resource group name provided by IT."
 }
 
-variable "environment_name" {
+variable "workload_name" {
   type        = string
-  default     = "meeting-analyzer"
-  description = "Short name prefix used for resource naming."
+  default     = "meetingassist"
+  description = "Workload identifier used in all resource names. Lowercase alphanumeric, no dashes."
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+$", var.workload_name))
+    error_message = "workload_name must be lowercase alphanumeric only (no dashes — used in Storage/ACR names)."
+  }
+}
+
+variable "environment" {
+  type        = string
+  default     = "dev"
+  description = "Deployment environment: dev, staging, or prod."
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be one of: dev, staging, prod."
+  }
+}
+
+variable "azure_region" {
+  type        = string
+  default     = "eastus"
+  description = "Short Azure region name used in resource names (e.g. eastus, westeurope)."
 }
 
 variable "acr_sku" {
   type        = string
   default     = "Basic"
   description = "SKU for the Azure Container Registry."
+}
+
+variable "deploy_apps" {
+  type        = bool
+  default     = false
+  description = "Set to true to deploy Container Apps. Must be false on first apply (before images are pushed to ACR)."
 }
 
 variable "acr_image_tag" {
@@ -34,7 +62,7 @@ variable "acr_image_tag" {
 
 variable "cosmos_database_name" {
   type        = string
-  default     = "meeting-analysis"
+  default     = "meeting-assistant"
   description = "Cosmos DB SQL database name used by the MCP server."
 }
 
@@ -58,6 +86,20 @@ variable "graph_client_id" {
   type        = string
   default     = ""
   description = "Azure AD client ID used by Microsoft Graph integration."
+}
+
+variable "graph_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Azure AD client secret for Graph API app-only auth (proactive meeting join)."
+}
+
+variable "bot_webhook_secret" {
+  type        = string
+  default     = "change-me-in-production"
+  sensitive   = true
+  description = "Shared secret sent with every Graph notification to validate authenticity."
 }
 
 variable "bot_service_sku" {

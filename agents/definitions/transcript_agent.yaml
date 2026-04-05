@@ -1,4 +1,4 @@
-name: post-meeting-transcription-agent
+name: transcript-agent
 description: Batch audio post-processing — prosody extraction and transcript enrichment (Stage 3)
 model: gpt-4o-meeting-bot
 temperature: 0.0

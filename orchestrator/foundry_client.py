@@ -32,17 +32,19 @@ def build_foundry_client(config: OrchestratorConfig) -> "FoundryClient | MockFou
         return LocalFoundryClient()
 
     try:
-        AIProjectClient = importlib.import_module("azure.ai.projects").AIProjectClient
-        DefaultAzureCredential = importlib.import_module("azure.identity").DefaultAzureCredential
+        agents_module = importlib.import_module("azure.ai.agents")
+        identity_module = importlib.import_module("azure.identity")
+        AgentsClientClass = agents_module.AgentsClient
+        CredentialClass = identity_module.DefaultAzureCredential
     except ModuleNotFoundError as exc:
         raise ImportError(
             "Azure SDK packages are required to build the Foundry client. "
-            "Install 'azure-ai-projects' and 'azure-identity'."
+            "Install 'azure-ai-agents' and 'azure-identity'."
         ) from exc
 
-    ai_client = AIProjectClient(
+    ai_client = AgentsClientClass(
         endpoint=config.azure_ai_project_endpoint,
-        credential=DefaultAzureCredential(),
+        credential=CredentialClass(),
     )
     return FoundryClient(ai_client)
 
@@ -122,7 +124,7 @@ class MockFoundryClient:
 
 
 class FoundryClient:
-    """Async wrapper around AIProjectClient for A2A task dispatch."""
+    """Async wrapper around AgentsClient for A2A task dispatch."""
 
     def __init__(self, ai_client) -> None:
         self._client = ai_client
@@ -145,63 +147,16 @@ class FoundryClient:
 
     def _dispatch_sync(self, agent_id: str, task: dict) -> dict:
         """Synchronous Foundry call — runs in a thread via dispatch()."""
-        thread = self._client.agents.threads.create()
-        self._client.agents.messages.create(
+        thread = self._client.create_thread()
+        self._client.create_message(
             thread_id=thread.id,
             role="user",
             content=json.dumps(task),
         )
-        self._client.agents.runs.create_and_process(
+        self._client.create_and_process_run(
             thread_id=thread.id,
             agent_id=agent_id,
         )
-        messages = self._client.agents.messages.list(thread_id=thread.id)
-        return json.loads(messages.data[0].content[0].text.value)
-
-
-def load_agent_ids() -> dict[str, str]:
-    """Load agent ID mapping from agent_ids.json next to this file."""
-    if not _AGENT_IDS_FILE.exists():
-        raise FileNotFoundError(
-            f"Agent IDs file not found: {_AGENT_IDS_FILE}. "
-            "Run deploy/register_agents.py to generate it."
-        )
-    return json.loads(_AGENT_IDS_FILE.read_text())
-
-
-class FoundryClient:
-    """Async wrapper around AIProjectClient for A2A task dispatch."""
-
-    def __init__(self, ai_client: AIProjectClient) -> None:
-        self._client = ai_client
-
-    async def dispatch(self, agent_id: str, task: dict) -> dict:
-        """Dispatch a task to an agent and return the parsed response."""
-        return await asyncio.to_thread(self._dispatch_sync, agent_id, task)
-
-    async def dispatch_with_timeout(
-        self, agent_id: str, task: dict, timeout_seconds: float
-    ) -> dict:
-        """Dispatch with one retry on timeout. Returns an error dict on repeated failure."""
-        for attempt in range(1, 3):
-            try:
-                async with asyncio.timeout(timeout_seconds):
-                    return await self.dispatch(agent_id, task)
-            except asyncio.TimeoutError:
-                logger.warning("Agent %s timed out (attempt %d/2)", agent_id, attempt)
-        return {"status": "error", "error": "Agent timed out after 2 attempts"}
-
-    def _dispatch_sync(self, agent_id: str, task: dict) -> dict:
-        """Synchronous Foundry call — runs in a thread via dispatch()."""
-        thread = self._client.agents.threads.create()
-        self._client.agents.messages.create(
-            thread_id=thread.id,
-            role="user",
-            content=json.dumps(task),
-        )
-        self._client.agents.runs.create_and_process(
-            thread_id=thread.id,
-            agent_id=agent_id,
-        )
-        messages = self._client.agents.messages.list(thread_id=thread.id)
+        messages = self._client.list_messages(thread_id=thread.id)
+        # First message in the list is the latest assistant response
         return json.loads(messages.data[0].content[0].text.value)

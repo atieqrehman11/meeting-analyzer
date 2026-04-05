@@ -5,6 +5,7 @@ from pydantic import Field
 class Settings(BaseSettings):
     # App
     app_name: str = "Meeting Bot MCP Server"
+    app_display_name: str = "Meeting Assistant"
     app_version: str = "1.0.0"
     log_level: str = "INFO"
 
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
     # Microsoft Graph
     graph_tenant_id: str = ""
     graph_client_id: str = ""
+    graph_client_secret: str = ""
 
     # Data residency
     azure_region: str = "eastus"

@@ -13,19 +13,19 @@ This guide covers how to run the Meeting Analyzer stack locally and test it end-
 **1. Install packages**
 
 ```bash
-./manage.sh install
+./run-dev.sh install
 ```
 
 **2. Initialise `.env`**
 
 ```bash
-./manage.sh env:init
+./run-dev.sh env:init
 ```
 
 **3. Start all services**
 
 ```bash
-./manage.sh all
+./run-dev.sh all
 ```
 
 | Service | URL |

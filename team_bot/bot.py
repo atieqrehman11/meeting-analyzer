@@ -7,6 +7,7 @@ from botbuilder.core import ActivityHandler, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
 
 from shared_models.mcp_client import BaseMcpClient
+from team_bot.app.config.settings import settings
 
 logger = logging.getLogger("team_bot.bot")
 
@@ -58,7 +59,7 @@ class TeamsMeetingBot(ActivityHandler):
 
     async def on_message_activity(self, turn_context: TurnContext) -> None:
         await turn_context.send_activity(
-            "Meeting Analyzer bot received your message. "
+            f"{settings.app_display_name} bot received your message. "
             "This service is a TeamsBot entrypoint for lifecycle and consent events."
         )
 

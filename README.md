@@ -37,9 +37,14 @@ A modular meeting analysis project built around a FastAPI-based MCP server, an o
 
 ## Key Files
 
-- `manage.sh`
-  - Shell utility script for repository operations and developer tooling.
-  - Supports targeted test runs and a grouped summary output for all modules.
+- `run-dev.sh`
+  - Local development script — start services, install dependencies, initialise `.env`.
+
+- `run-tests.sh`
+  - Test runner for all modules with grouped summary output.
+
+- `deploy.sh`
+  - Azure deployment script — provision infra, build/push images, assign RBAC, register agents.
 
 - `mcp/main.py`
   - FastAPI application entrypoint for the MCP server.
@@ -58,38 +63,133 @@ A modular meeting analysis project built around a FastAPI-based MCP server, an o
 4. The `mcp/` service provides the API surface and backend support for data storage, similarity search, and transcript handling.
 5. `deploy/` scripts prepare the MCP endpoint and agent registrations for deployment.
 
+## System Architecture
+
+```mermaid
+graph TD
+    subgraph Teams["Microsoft Teams"]
+        T_EVENT["Activity events\n(join / leave / message)"]
+        T_CHAT["Meeting chat"]
+    end
+
+    subgraph Bot["team_bot  (FastAPI + Bot Framework)"]
+        BF_ADAPTER["BotFrameworkAdapter\n/api/messages"]
+        GRAPH_WEBHOOK["Graph webhook\n/api/graph/webhook"]
+        BOT_HANDLER["TeamsMeetingBot\nlifecycle & consent"]
+        ORCH_FACTORY["OrchestratorFactory"]
+    end
+
+    subgraph Orchestrator["orchestrator"]
+        ORCH["Orchestrator\nmeeting lifecycle"]
+        INITIATOR["MeetingInitiator\nfetch calendar + build record"]
+        CAPTURE_LOOP["TranscriptCaptureLoop\nevery N seconds"]
+        RT_LOOP["RealTimeLoop\nagenda · purpose · tone · pulse · time"]
+        POST["PostMeetingAnalyzer\nrun after meeting ends"]
+    end
+
+    subgraph MCP["mcp  (FastAPI)"]
+        MCP_API["REST API\n/meeting  /transcript  /realtime  /poll  /analysis"]
+        BACKENDS["Backend layer"]
+        MOCK_B["MockBackend\nlocal dev"]
+        GRAPH_B["AzureGraphBackend\n+ cards.py renderer"]
+        DB_B["DatabaseBackend\nCosmos DB"]
+        STORAGE_B["StorageBackend\nBlob Storage"]
+    end
+
+    subgraph Agents["Azure AI Foundry agents"]
+        AG_TRANSCRIPT["transcript-agent"]
+        AG_ANALYSIS["analysis-agent"]
+        AG_SENTIMENT["sentiment-agent"]
+    end
+
+    subgraph Azure["Azure services"]
+        COSMOS["Cosmos DB"]
+        BLOB["Blob Storage"]
+        GRAPH_API["Microsoft Graph API\nonlineMeetings · chats"]
+    end
+
+    %% Teams → Bot
+    T_EVENT -->|Bot Framework activity| BF_ADAPTER
+    GRAPH_API -->|change notification| GRAPH_WEBHOOK
+
+    %% Bot internals
+    BF_ADAPTER --> BOT_HANDLER
+    BOT_HANDLER -->|start / end meeting| ORCH_FACTORY
+    ORCH_FACTORY --> ORCH
+
+    %% Orchestrator internals
+    ORCH --> INITIATOR
+    ORCH --> CAPTURE_LOOP
+    ORCH --> RT_LOOP
+    ORCH --> POST
+
+    %% Orchestrator → MCP
+    INITIATOR -->|get_calendar_event\nstore_meeting_record| MCP_API
+    CAPTURE_LOOP -->|store_transcript_segment\nvia foundry dispatch| Agents
+    RT_LOOP -->|compute_similarity\nsend_realtime_alert\nget_participant_rates| MCP_API
+    POST -->|get_analysis_report\nstore_analysis_report\ncreate_poll| MCP_API
+
+    %% Orchestrator → Agents
+    POST -->|analyze_meeting\nanalyze_sentiment\nfinalize_transcript| Agents
+
+    %% MCP → Backends
+    MCP_API --> BACKENDS
+    BACKENDS --> MOCK_B
+    BACKENDS --> GRAPH_B
+    BACKENDS --> DB_B
+    BACKENDS --> STORAGE_B
+
+    %% Backends → Azure
+    GRAPH_B -->|post card / send alert| GRAPH_API
+    DB_B --> COSMOS
+    STORAGE_B --> BLOB
+
+    %% Graph → Teams chat
+    GRAPH_API -->|Adaptive Card| T_CHAT
+```
+
+**Runtime flows**
+
+| Flow | Path |
+|------|------|
+| Meeting start | Teams → Bot → Orchestrator → MeetingInitiator → MCP (calendar + record) |
+| Transcript capture | Orchestrator loop → Foundry → transcript-agent → MCP store |
+| Real-time alerts | Orchestrator loop → MCP send_realtime_alert → GraphBackend → cards.py → Graph API → meeting chat |
+| Meeting end | Teams → Bot → Orchestrator → PostMeetingAnalyzer → Foundry agents (parallel) → MCP report |
+| Graph proactive join | Graph webhook → Bot → GraphSubscriptionService → Bot Framework proactive |
+
 ## Developer workflow
 
 Use `manage.sh` for local operations.
 
-- `./manage.sh env:init`
+- `./run-dev.sh env:init`
   - Create a local `.env` from `.env.example` if needed.
 
-- `./manage.sh install`
+- `./run-dev.sh install`
   - Installs dependencies for `mcp/`, `orchestrator/`, and `team_bot/` into `.venv`.
 
-- `./manage.sh mcp`
+- `./run-dev.sh mcp`
   - Starts the MCP server on `MCP_PORT` (default `8000`).
 
-- `./manage.sh bot`
+- `./run-dev.sh bot`
   - Starts the Teams bot service on `BOT_PORT` (default `3978`).
 
-- `./manage.sh all`
+- `./run-dev.sh all`
   - Starts both MCP and bot services together on separate ports.
 
-- `./manage.sh orchestrator`
+- `./run-dev.sh`
   - Prints guidance for the orchestrator component; the orchestrator is used internally by the bot and is not launched as a standalone server.
 
-- `./manage.sh test:mcp`
+- `./run-tests.sh mcp`
   - Runs only MCP server tests.
 
-- `./manage.sh test:orchestrator`
+- `./run-tests.sh orchestrator`
   - Runs only orchestrator tests.
 
-- `./manage.sh test:team-bot`
+- `./run-tests.sh bot`
   - Runs only team bot tests.
 
-- `./manage.sh test`
+- `./run-tests.sh`
   - Runs all test suites and prints grouped module summaries at the end.
   - Output format is like:
     - `MCP: 10 failed, 2 passed`

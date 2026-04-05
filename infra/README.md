@@ -4,12 +4,12 @@
 
 The infrastructure is provisioned with Terraform (Azure provider ~4.0) and targets an **existing** Azure resource group. All resources derive their location from that resource group — no region variable needed.
 
-All deployment steps are scripted through `manage.sh` from the repo root. To deploy everything at once:
+All deployment steps are scripted through `deploy.sh` from the repo root. To deploy everything at once:
 
 ```bash
 cp infra/terraform.tfvars.example infra/terraform.tfvars
 # fill in your values, then:
-./manage.sh deploy:all
+./deploy.sh all
 ```
 
 Or run each step individually — see the steps below.
@@ -57,9 +57,11 @@ All resources are created inside the resource group you supply. Names are auto-g
 
 > GPT-4o availability varies by region. If `terraform apply` fails with a quota error, either request a quota increase in the Azure portal or set `foundry_model_sku = "GlobalStandard"` in `terraform.tfvars` which routes across regions.
 
+> All resource names follow the Azure CAF prefix convention: `{type}-{workload}-{env}-{region}`. Storage Account and ACR use a no-dash slug variant (`{type}{workload}{env}{instance}`) due to Azure naming constraints. The workload name defaults to `meetingassist`.
+
 > Set `mcp_backend_mode = "mock"` to skip Storage and Cosmos DB entirely. The MCP Container App will start with `MCP_BACKEND_MODE=mock` and use in-memory data. Useful for dev/test deployments where you only need the bot and agents wired up.
 
-Both Container Apps use a **SystemAssigned managed identity**, which you should grant RBAC roles to after provisioning (see Post-Provisioning section below).
+
 
 ### Outputs
 
@@ -90,7 +92,9 @@ Key values to set:
 
 ```hcl
 resource_group_name  = "your-existing-rg"
-environment_name     = "meeting-analyzer"
+workload_name        = "meetingassist"   # used in all resource names
+environment          = "dev"             # dev | staging | prod
+azure_region         = "eastus"
 mcp_backend_mode     = "mock"       # "mock" skips Storage & Cosmos, "azure" creates them
 acr_image_tag        = "latest"
 graph_tenant_id      = "<aad-tenant-id>"
@@ -104,7 +108,7 @@ foundry_model_capacity = 10         # TPM in thousands — increase for producti
 Then apply:
 
 ```bash
-./manage.sh infra:apply
+./deploy.sh infra
 ```
 
 ---
@@ -112,9 +116,9 @@ Then apply:
 ## Step 2 — Build & Push Docker Images
 
 ```bash
-./manage.sh docker:push
+./deploy.sh docker
 # or with a specific tag:
-./manage.sh docker:push --tag v1.0.0
+./deploy.sh docker --tag v1.0.0
 ```
 
 Both images use the repo root as build context — the Dockerfiles copy `shared_models` from a sibling directory.
@@ -124,7 +128,7 @@ Both images use the repo root as build context — the Dockerfiles copy `shared_
 ## Step 3 — Assign RBAC Roles
 
 ```bash
-./manage.sh deploy:rbac
+./deploy.sh rbac
 ```
 
 Reads all resource names from Terraform outputs and assigns:
@@ -138,7 +142,7 @@ Reads all resource names from Terraform outputs and assigns:
 ## Step 4 — Verify MCP Server
 
 ```bash
-./manage.sh check:mcp
+./deploy.sh check-mcp
 ```
 
 ---
@@ -146,10 +150,10 @@ Reads all resource names from Terraform outputs and assigns:
 ## Step 5 — Register AI Foundry Agents
 
 ```bash
-AZURE_AI_PROJECT_ENDPOINT=<your-foundry-endpoint> \
-MCP_SERVER_URL=$(terraform -chdir=infra output -raw mcp_server_url) \
-  ./manage.sh deploy:agents
+./deploy.sh agents
 ```
+
+Both `AZURE_AI_PROJECT_ENDPOINT` and `MCP_SERVER_URL` are read automatically from Terraform outputs — no manual env vars needed.
 
 The script is idempotent — re-running it updates existing agents rather than creating duplicates.
 
@@ -159,7 +163,7 @@ Agents registered:
 |------------|------|
 | `analysis-agent` | Post-meeting analysis, agenda adherence, action items |
 | `sentiment-agent` | Sentiment scoring, participation, prosody enrichment |
-| `post-meeting-transcription-agent` | Batch audio post-processing, transcript enrichment |
+| `transcript-agent` | Batch audio post-processing, transcript enrichment |
 
 On success, `orchestrator/agent_ids.json` is written:
 
@@ -167,7 +171,7 @@ On success, `orchestrator/agent_ids.json` is written:
 {
   "analysis-agent": "asst_...",
   "sentiment-agent": "asst_...",
-  "post-meeting-transcription-agent": "asst_..."
+  "transcript-agent": "asst_..."
 }
 ```
 

@@ -1,23 +1,46 @@
-resource_group_name       = "your-existing-resource-group"
-environment_name          = "meeting-analyzer"
-mcp_backend_mode          = "mock"            # mock | azure
-acr_sku                   = "Basic"
-acr_image_tag             = "latest"
-cosmos_database_name      = "meeting-analysis"
-mcp_log_level             = "INFO"
-bot_log_level             = "INFO"
-graph_tenant_id           = ""
-graph_client_id           = ""
+# ---------------------------------------------------------------------------
+# Required
+# ---------------------------------------------------------------------------
+resource_group_name = "rg-meeting-assistant-dev-eastus"   # must already exist
 
+# ---------------------------------------------------------------------------
+# Naming
+# ---------------------------------------------------------------------------
+workload_name = "meetingassist"   # used in all resource names — alphanumeric only
+environment   = "dev"             # dev | staging | prod
+azure_region  = "eastus"          # short region name used in resource names
+
+# ---------------------------------------------------------------------------
+# Resource configuration
+# ---------------------------------------------------------------------------
+mcp_backend_mode     = "mock"             # mock | azure
+acr_sku              = "Basic"            # Basic | Standard | Premium
+acr_image_tag        = "latest"
+deploy_apps          = false              # set by deploy.sh automatically — do not change manually
+cosmos_database_name = "meeting-assistant"
+mcp_log_level        = "INFO"
+bot_log_level        = "INFO"
+
+# ---------------------------------------------------------------------------
+# Microsoft Graph — proactive meeting join
+# ---------------------------------------------------------------------------
+graph_tenant_id     = "3bab40f8-6949-44ad-b9c1-330d021bcc97"
+graph_client_id     = ""
+graph_client_secret = ""                      # required for proactive meeting join
+bot_webhook_secret  = "fdafa1e1631f5688945d11c579a45d0f0d3191a9152a2cf7108d9e4e559cfdc2"
+
+# ---------------------------------------------------------------------------
 # Teams bot registration (teams.tf)
-bot_service_sku         = "F0"   # F0 for dev, S1 for production
+# ---------------------------------------------------------------------------
+bot_service_sku         = "F0"   # F0 = free (dev/test) | S1 = standard (prod)
 bot_secret_expiry_years = 1
 
+# ---------------------------------------------------------------------------
 # Azure AI Foundry (foundry.tf)
-# foundry_model_name and foundry_deployment_name must stay in sync with
-# the 'model' field in agents/definitions/*.yaml
-foundry_model_name      = "gpt-4o"              # Azure OpenAI model name
-foundry_deployment_name = "gpt-4o-meeting-bot"  # must match agents/definitions/*.yaml
-foundry_model_version   = "2024-11-20"          # check availability for your region
-foundry_model_sku       = "GlobalStandard"      # GlobalStandard recommended — better quota availability
-foundry_model_capacity  = 10                    # TPM in thousands — increase for production
+# foundry_deployment_name must match the 'model' field in agents/definitions/*.yaml
+# ---------------------------------------------------------------------------
+foundry_model_name      = "gpt-4o"
+foundry_deployment_name = "gpt-4o-meeting-bot"   # must match agents/definitions/*.yaml
+foundry_model_version   = "2024-11-20"
+foundry_model_sku       = "GlobalStandard"        # GlobalStandard = better quota availability
+foundry_model_capacity  = 10                      # TPM in thousands — increase for prod

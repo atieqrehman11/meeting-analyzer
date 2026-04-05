@@ -18,15 +18,46 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  bot_messaging_endpoint = "https://${azurerm_container_app.bot.latest_revision_fqdn}/api/messages"
+  bot_messaging_endpoint = var.deploy_apps ? "https://${azurerm_container_app.bot[0].ingress[0].fqdn}/api/messages" : "https://placeholder-update-after-deploy/api/messages"
 }
 
 # 1. Azure AD app registration
+# sign_in_audience = AzureADMultipleOrgs allows users from any tenant's Teams
+# to interact with the bot. The Bot Service itself stays SingleTenant (required
+# by Azure — multitenant Bot Service creation is deprecated).
 resource "azuread_application" "bot" {
-  display_name = "${local.normalized_name}-bot"
+  display_name     = "app-${local.workload}-bot-${local.env}"
+  sign_in_audience = "AzureADMultipleOrgs"
 
   web {
     redirect_uris = ["https://token.botframework.com/.auth/web/redirect"]
+  }
+
+  # ---------------------------------------------------------------------------
+  # Microsoft Graph application permissions — required for proactive meeting join
+  #
+  # Resource app ID for Microsoft Graph is always 00000003-0000-0000-c000-000000000000
+  #
+  # Permission IDs (application type — no user sign-in required):
+  #   Calendars.Read            = 798ee544-9d2d-430c-a058-570e29e34338
+  #   OnlineMeetings.Read.All   = c1684f21-1984-47fa-9d61-2dc8c296bb70
+  #   OnlineMeetings.ReadWrite.All = a7a681dc-756e-4909-b988-f160edc6655f
+  # ---------------------------------------------------------------------------
+  required_resource_access {
+    resource_app_id = "00000003-0000-0000-c000-000000000000" # Microsoft Graph
+
+    resource_access {
+      id   = "798ee544-9d2d-430c-a058-570e29e34338" # Calendars.Read
+      type = "Role"
+    }
+    resource_access {
+      id   = "c1684f21-1984-47fa-9d61-2dc8c296bb70" # OnlineMeetings.Read.All
+      type = "Role"
+    }
+    resource_access {
+      id   = "a7a681dc-756e-4909-b988-f160edc6655f" # OnlineMeetings.ReadWrite.All
+      type = "Role"
+    }
   }
 }
 
@@ -42,23 +73,34 @@ resource "azuread_application_password" "bot" {
   end_date       = timeadd(timestamp(), "${var.bot_secret_expiry_years * 8760}h")
 
   lifecycle {
-    # Prevent replacement on every apply due to timestamp() being re-evaluated.
-    # Rotate manually by tainting this resource.
     ignore_changes = [end_date]
+    replace_triggered_by = [azuread_application.bot]
+    # If destroy fails with 404 (app deleted out-of-band), remove from state manually:
+    #   terraform -chdir=infra state rm azuread_application_password.bot
+    #   terraform -chdir=infra state rm azuread_application.bot
+    #   terraform -chdir=infra state rm azuread_service_principal.bot
   }
 }
 
-# 4. Azure Bot Service (Bot Channels Registration)
+# 4. Azure Bot Service — SingleTenant (multitenant is deprecated)
 resource "azurerm_bot_service_azure_bot" "bot" {
-  name                = "${local.normalized_name}-bot-svc"
+  name                = "bot-${local.base}"
   resource_group_name = data.azurerm_resource_group.rg.name
-  location            = "global" # Bot Service is always global
+  location            = "global"
   microsoft_app_id    = azuread_application.bot.client_id
+  microsoft_app_type  = "SingleTenant"
+  microsoft_app_tenant_id = data.azurerm_client_config.current.tenant_id
   sku                 = var.bot_service_sku
   endpoint            = local.bot_messaging_endpoint
 
   tags = {
-    environment = var.environment_name
+    workload    = var.workload_name
+    environment = var.environment
+    region      = var.azure_region
+  }
+
+  lifecycle {
+    ignore_changes = [endpoint]
   }
 }
 
