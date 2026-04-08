@@ -50,7 +50,7 @@ variable "acr_sku" {
 
 variable "deploy_apps" {
   type        = bool
-  default     = false
+  default     = true
   description = "Set to true to deploy Container Apps. Must be false on first apply (before images are pushed to ACR)."
 }
 
@@ -79,13 +79,13 @@ variable "bot_log_level" {
 variable "graph_tenant_id" {
   type        = string
   default     = ""
-  description = "Azure AD tenant ID used by Microsoft Graph integration."
+  description = "Unused — tenant ID is derived automatically from the Terraform caller identity. Kept for backwards compatibility."
 }
 
 variable "graph_client_id" {
   type        = string
   default     = ""
-  description = "Azure AD client ID used by Microsoft Graph integration."
+  description = "Unused — client ID is derived automatically from the provisioned AD app registration. Kept for backwards compatibility."
 }
 
 variable "graph_client_secret" {
@@ -161,4 +161,10 @@ variable "foundry_model_capacity" {
   type        = number
   default     = 10
   description = "Token-per-minute capacity in thousands (e.g. 10 = 10K TPM). Increase for production."
+}
+
+variable "bot_webhook_base_url" {
+  type        = string
+  default     = ""
+  description = "Public HTTPS base URL of the bot Container App. Set after first deploy. Used to register Graph webhook."
 }

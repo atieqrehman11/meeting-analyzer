@@ -99,7 +99,7 @@ class GraphSubscriptionService:
         payload = {
             "changeType": "created,updated",
             "notificationUrl": self._webhook_url,
-            "resource": "/communications/onlineMeetings",
+            "resource": "communications/onlineMeetings",
             "expirationDateTime": expiry,
             "clientState": self._webhook_secret,
         }
@@ -149,6 +149,11 @@ class GraphSubscriptionService:
     def start_renewal_loop(self) -> None:
         """Start a background task that renews the subscription periodically."""
         self._renewal_task = asyncio.create_task(self._renewal_loop(), name="graph-renewal")
+
+    @property
+    def is_active(self) -> bool:
+        """True if a subscription was successfully created."""
+        return self._subscription_id is not None
 
     async def proactive_join(self, meeting_id: str, service_url: str, conversation_id: str) -> None:
         """
@@ -226,4 +231,5 @@ class GraphSubscriptionService:
             and self._client_id
             and self._client_secret
             and self._webhook_url
+            and self._webhook_url.startswith("https://")
         )

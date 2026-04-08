@@ -1,0 +1,58 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.20/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.20",
+  "version": "1.0.1",
+  "id": "b207a8f4-8369-4fcc-8a03-f2b418a56fd5",
+  "developer": {
+    "name": "Meeting Assistant",
+    "websiteUrl": "https://example.com",
+    "privacyUrl": "https://example.com/privacy",
+    "termsOfUseUrl": "https://example.com/terms"
+  },
+  "name": {
+    "short": "Meeting Assistant",
+    "full": "Meeting Assistant Teams Bot"
+  },
+  "description": {
+    "short": "AI-powered meeting intelligence and insights.",
+    "full": "Meeting Assistant joins your Teams meetings, captures transcripts, and delivers real-time insights and post-meeting analysis."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#0078D4",
+  "bots": [
+    {
+      "botId": "b207a8f4-8369-4fcc-8a03-f2b418a56fd5",
+      "scopes": ["team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["team", "groupChat"],
+          "commands": [
+            { "title": "help", "description": "Show available commands" },
+            { "title": "status", "description": "Show current meeting analysis status" }
+          ]
+        }
+      ]
+    }
+  ],
+  "meetingExtensionDefinition": {
+    "scenes": [],
+    "supportsStreaming": false,
+    "supportsAnonymousGuestUsers": false
+  },
+  "configurableTabs": [],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": [
+    "ca-meetingassist-bot-dev-eastus.proudbay-1fefc57d.eastus.azurecontainerapps.io",
+    "ca-meetingassist-mcp-dev-eastus.proudbay-1fefc57d.eastus.azurecontainerapps.io",
+    "token.botframework.com"
+  ],
+  "webApplicationInfo": {
+    "id": "b207a8f4-8369-4fcc-8a03-f2b418a56fd5",
+    "resource": "api://ca-meetingassist-bot-dev-eastus.proudbay-1fefc57d.eastus.azurecontainerapps.io/b207a8f4-8369-4fcc-8a03-f2b418a56fd5"
+  }
+}

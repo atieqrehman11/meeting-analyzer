@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Required
 # ---------------------------------------------------------------------------
-resource_group_name = "rg-meeting-assistant-dev-eastus"   # must already exist
+resource_group_name = "rg-meeting-assistant"   # must already exist
 
 # ---------------------------------------------------------------------------
 # Naming
@@ -13,7 +13,7 @@ azure_region  = "eastus"          # short region name used in resource names
 # ---------------------------------------------------------------------------
 # Resource configuration
 # ---------------------------------------------------------------------------
-mcp_backend_mode     = "mock"             # mock | azure
+mcp_backend_mode     = "azure"             # mock | azure
 acr_sku              = "Basic"            # Basic | Standard | Premium
 acr_image_tag        = "latest"
 deploy_apps          = false              # set by deploy.sh automatically — do not change manually
@@ -22,12 +22,16 @@ mcp_log_level        = "INFO"
 bot_log_level        = "INFO"
 
 # ---------------------------------------------------------------------------
-# Microsoft Graph — proactive meeting join
+# Microsoft Graph — auto-provisioned by Terraform
 # ---------------------------------------------------------------------------
-graph_tenant_id     = "3bab40f8-6949-44ad-b9c1-330d021bcc97"
-graph_client_id     = ""
-graph_client_secret = ""                      # required for proactive meeting join
-bot_webhook_secret  = "fdafa1e1631f5688945d11c579a45d0f0d3191a9152a2cf7108d9e4e559cfdc2"
+# graph_tenant_id, graph_client_id, graph_client_secret, and bot_webhook_secret
+# are all derived automatically from the provisioned AD app registration and a
+# generated random password. You do not need to set these here.
+#
+# After apply, retrieve them for local dev with:
+#   terraform -chdir=infra output bot_app_id
+#   terraform -chdir=infra output -raw bot_app_password
+#   terraform -chdir=infra output -raw bot_webhook_secret
 
 # ---------------------------------------------------------------------------
 # Teams bot registration (teams.tf)

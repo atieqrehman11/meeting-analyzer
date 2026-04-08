@@ -39,6 +39,10 @@ resource "azurerm_container_app" "mcp" {
     name  = "acr-password"
     value = azurerm_container_registry.acr.admin_password
   }
+  secret {
+    name  = "mcp-graph-client-secret"
+    value = azuread_application_password.bot.value
+  }
 
   template {
     min_replicas = 1
@@ -76,11 +80,15 @@ resource "azurerm_container_app" "mcp" {
       }
       env {
         name  = "MCP_GRAPH_TENANT_ID"
-        value = var.graph_tenant_id
+        value = data.azurerm_client_config.current.tenant_id
       }
       env {
         name  = "MCP_GRAPH_CLIENT_ID"
-        value = var.graph_client_id
+        value = azuread_application.bot.client_id
+      }
+      env {
+        name        = "MCP_GRAPH_CLIENT_SECRET"
+        secret_name = "mcp-graph-client-secret"
       }
     }
   }
@@ -120,21 +128,13 @@ resource "azurerm_container_app" "bot" {
     name  = "bot-app-password"
     value = azuread_application_password.bot.value
   }
-
-  dynamic "secret" {
-    for_each = var.graph_client_secret != "" ? [1] : []
-    content {
-      name  = "bot-graph-client-secret"
-      value = var.graph_client_secret
-    }
+  secret {
+    name  = "bot-graph-client-secret"
+    value = azuread_application_password.bot.value
   }
-
-  dynamic "secret" {
-    for_each = var.bot_webhook_secret != "" ? [1] : []
-    content {
-      name  = "bot-webhook-secret"
-      value = var.bot_webhook_secret
-    }
+  secret {
+    name  = "bot-webhook-secret"
+    value = random_password.webhook_secret.result
   }
 
   template {
@@ -169,29 +169,27 @@ resource "azurerm_container_app" "bot" {
       }
       env {
         name  = "BOT_GRAPH_TENANT_ID"
-        value = var.graph_tenant_id
+        value = data.azurerm_client_config.current.tenant_id
+      }
+      env {
+        name  = "BOT_WEBHOOK_BASE_URL"
+        value = var.bot_webhook_base_url
       }
       env {
         name  = "BOT_GRAPH_CLIENT_ID"
-        value = var.graph_client_id
+        value = azuread_application.bot.client_id
       }
       env {
         name        = "BOT_APP_PASSWORD"
         secret_name = "bot-app-password"
       }
-      dynamic "env" {
-        for_each = var.graph_client_secret != "" ? [1] : []
-        content {
-          name        = "BOT_GRAPH_CLIENT_SECRET"
-          secret_name = "bot-graph-client-secret"
-        }
+      env {
+        name        = "BOT_GRAPH_CLIENT_SECRET"
+        secret_name = "bot-graph-client-secret"
       }
-      dynamic "env" {
-        for_each = var.bot_webhook_secret != "" ? [1] : []
-        content {
-          name        = "BOT_WEBHOOK_SECRET"
-          secret_name = "bot-webhook-secret"
-        }
+      env {
+        name        = "BOT_WEBHOOK_SECRET"
+        secret_name = "bot-webhook-secret"
       }
     }
   }

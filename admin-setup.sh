@@ -17,7 +17,7 @@ set -euo pipefail
 #   ./admin-setup.sh --resource-group <rg>  # skip prompt for RG
 #
 # Or set env vars to skip all prompts:
-#   RESOURCE_GROUP=rg-meeting-assistant-dev-eastus \
+#   RESOURCE_GROUP=rg-meeting-assistant \
 #   BOT_APP_ID=<app-id> \
 #   ./admin-setup.sh
 # =============================================================================

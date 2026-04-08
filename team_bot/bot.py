@@ -58,16 +58,48 @@ class TeamsMeetingBot(ActivityHandler):
         self._manager = manager
 
     async def on_message_activity(self, turn_context: TurnContext) -> None:
-        await turn_context.send_activity(
-            f"{settings.app_display_name} bot received your message. "
-            "This service is a TeamsBot entrypoint for lifecycle and consent events."
-        )
+        # Strip bot mention (e.g. "@Meeting Assistant status" → "status")
+        text = (turn_context.activity.text or "").strip()
+        if turn_context.activity.entities:
+            for entity in turn_context.activity.entities:
+                if entity.get("type") == "mention" and \
+                   entity.get("mentioned", {}).get("id") == turn_context.activity.recipient.id:
+                    text = text.replace(entity.get("text", ""), "").strip()
+        text = text.lower()
+
+        if text in ("help", "/help"):
+            await turn_context.send_activity(
+                f"**{settings.app_display_name}** — available commands:\n\n"
+                "• **help** — show this message\n"
+                "• **status** — show active meeting analysis status\n\n"
+                "Add me to a Teams meeting to start capturing transcripts and generating insights."
+            )
+        elif text in ("status", "/status"):
+            await turn_context.send_activity(
+                f"{settings.app_display_name} is running. Add me to a meeting to begin analysis."
+            )
+        else:
+            await turn_context.send_activity(
+                f"Hi! I'm **{settings.app_display_name}**. "
+                "Add me to a Teams meeting to start capturing transcripts and generating insights. "
+                "Type **help** to see available commands."
+            )
 
     async def on_conversation_update_activity(self, turn_context: TurnContext) -> None:
         activity = turn_context.activity
+
+        # Send welcome message when bot is added to a team or chat
+        if activity.members_added:
+            for member in activity.members_added:
+                if getattr(member, "id", None) == activity.recipient.id:
+                    await turn_context.send_activity(
+                        f"👋 Hi! I'm **{settings.app_display_name}**. "
+                        "Add me to a Teams meeting to start capturing transcripts and generating post-meeting insights. "
+                        "Type **help** to see available commands."
+                    )
+
         meeting_id = self._extract_meeting_id(activity)
         if not meeting_id:
-            logger.warning("Conversation update event missing meeting id")
             return
 
         if activity.members_added:

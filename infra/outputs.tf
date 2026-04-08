@@ -49,8 +49,14 @@ output "bot_app_id" {
 }
 
 output "bot_app_password" {
-  description = "Generated client secret for the Teams bot. Use this as BOT_APP_PASSWORD."
+  description = "Generated client secret for the Teams bot. Use this as BOT_APP_PASSWORD / BOT_GRAPH_CLIENT_SECRET."
   value       = azuread_application_password.bot.value
+  sensitive   = true
+}
+
+output "bot_webhook_secret" {
+  description = "Auto-generated webhook secret. Use this as BOT_WEBHOOK_SECRET for local dev."
+  value       = random_password.webhook_secret.result
   sensitive   = true
 }
 
@@ -72,4 +78,9 @@ output "azure_ai_project_endpoint" {
 output "foundry_deployment_name" {
   description = "The GPT-4o model deployment name used by all agents."
   value       = azapi_resource.foundry_gpt4o.name
+}
+
+output "bot_service_name" {
+  description = "The Azure Bot Service resource name."
+  value       = azurerm_bot_service_azure_bot.bot.name
 }

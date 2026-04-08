@@ -12,11 +12,14 @@ from team_bot.app.config.settings import settings
 from team_bot.bot import MeetingOrchestratorManager, TeamsMeetingBot
 from team_bot.orchestrator_factory import build_meeting_orchestrator
 
-adapter_settings = BotFrameworkAdapterSettings(
-    app_id=settings.bot_app_id,
-    app_password=settings.bot_app_password,
-)
-adapter = BotFrameworkAdapter(adapter_settings)
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def _get_adapter() -> BotFrameworkAdapter:
+    return BotFrameworkAdapter(BotFrameworkAdapterSettings(
+        app_id=settings.bot_app_id,
+        app_password=settings.bot_app_password,
+    ))
 
 manager = MeetingOrchestratorManager(build_meeting_orchestrator)
 bot = TeamsMeetingBot(manager)
@@ -55,8 +58,10 @@ async def messages(request: Request, authorization: Annotated[str | None, Header
     activity = Activity().deserialize(body)
     auth_header = authorization or ""
 
+    logger.debug("Incoming activity: body=%s auth_header=%s", body, auth_header)
     try:
-        response = await adapter.process_activity(activity, auth_header, bot.on_turn)
+        response = await _get_adapter().process_activity(activity, auth_header, bot.on_turn)
+        
         if response is not None:
             return JSONResponse(content=response.body or {}, status_code=response.status)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={})
@@ -70,21 +75,26 @@ async def graph_webhook_validate(
     validation_token: Annotated[str, Query(alias="validationToken")],
 ) -> PlainTextResponse:
     """
-    Graph subscription validation handshake.
-    When registering a new subscription, Graph sends a GET with ?validationToken=...
-    and expects it echoed back as plain text within 10 seconds.
+    Graph subscription validation handshake — GET variant.
     """
-    logger.info("Graph webhook validation handshake received")
+    logger.info("Graph webhook GET validation handshake received")
     return PlainTextResponse(content=validation_token, status_code=200)
 
 
-@router.post("/api/graph/webhook")
-async def graph_webhook_notify(request: Request) -> JSONResponse:
+@router.post("/api/graph/webhook", response_model=None)
+async def graph_webhook_notify(
+    request: Request,
+    validation_token: Annotated[str | None, Query(alias="validationToken")] = None,
+) -> PlainTextResponse | JSONResponse:
     """
     Graph change notification handler.
-    Called when a subscribed online meeting is created or updated.
-    Validates the clientState secret and triggers a proactive bot join.
+    Graph sends a POST with ?validationToken during subscription creation —
+    echo it back as plain text. Real notifications arrive without that param.
     """
+    # Validation handshake — Graph POSTs with ?validationToken during subscription setup
+    if validation_token:
+        logger.info("Graph webhook POST validation handshake received")
+        return PlainTextResponse(content=validation_token, status_code=200)
     try:
         body = await request.json()
     except Exception:

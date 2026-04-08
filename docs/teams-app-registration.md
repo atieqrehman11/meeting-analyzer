@@ -221,5 +221,4 @@ The Container App is automatically updated with the new secret — no manual ste
 | Bot doesn't respond in meeting | Messaging endpoint not reachable | Check Container App is running: `az containerapp show --name <bot-app> --resource-group <rg> --query properties.runningStatus` |
 | 401 Unauthorized from bot | Wrong `BOT_APP_ID` or `BOT_APP_PASSWORD` | Verify env vars in Container App: `az containerapp show ... --query properties.template.containers[0].env` |
 | "Upload custom app" option missing | Sideloading disabled in tenant | Enable in Teams Admin Center → Teams apps → Setup policies |
-| Manifest validation error on upload | Schema mismatch or missing fields | Validate at [Teams Developer Portal](https://dev.teams.microsoft.com) → Apps → Import |
-| Bot joins but posts no report | Agent registration incomplete | Re-run `./deploy.sh agents` and check `orchestrator/agent_ids.json` is populated |
+| Manifest validation error on upload | Schema mismatch or missing fields | Validate at [Teams Developer Portal] 

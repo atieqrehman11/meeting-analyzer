@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from team_bot.app.api.v1.router import router
 from team_bot.app.common.logger import logger
 from team_bot.app.config.settings import settings
-from team_bot.app.api.v1.teams import manager, adapter
+from team_bot.app.api.v1.teams import manager, _get_adapter
 from team_bot.graph_service import GraphSubscriptionService
 
 # Module-level reference so the webhook handler can access it without
@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     global graph_service
 
     logger.info("Team bot starting")
+    logger.info("BOT_APP_ID=%s", settings.bot_app_id[:8] + "..." if settings.bot_app_id else "EMPTY")
 
     # Start Graph subscription for proactive meeting join if configured
     graph_service = GraphSubscriptionService(
@@ -29,11 +30,12 @@ async def lifespan(app: FastAPI):
         client_secret=settings.graph_client_secret,
         webhook_url=f"{settings.webhook_base_url.rstrip('/')}/api/graph/webhook",
         webhook_secret=settings.webhook_secret,
-        adapter=adapter,
+        adapter=_get_adapter(),
         bot_app_id=settings.bot_app_id,
     )
     await graph_service.subscribe()
-    graph_service.start_renewal_loop()
+    if graph_service.is_active:
+        graph_service.start_renewal_loop()
 
     yield
 

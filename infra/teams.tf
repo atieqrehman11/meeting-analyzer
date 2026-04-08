@@ -27,7 +27,7 @@ locals {
 # by Azure — multitenant Bot Service creation is deprecated).
 resource "azuread_application" "bot" {
   display_name     = "app-${local.workload}-bot-${local.env}"
-  sign_in_audience = "AzureADMultipleOrgs"
+  sign_in_audience = "AzureADMyOrg"
 
   web {
     redirect_uris = ["https://token.botframework.com/.auth/web/redirect"]
@@ -84,7 +84,7 @@ resource "azuread_application_password" "bot" {
 
 # 4. Azure Bot Service — SingleTenant (multitenant is deprecated)
 resource "azurerm_bot_service_azure_bot" "bot" {
-  name                = "bot-${local.base}"
+  name                = "bot-${local.base}-${local.sfx}"
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = "global"
   microsoft_app_id    = azuread_application.bot.client_id
@@ -100,7 +100,7 @@ resource "azurerm_bot_service_azure_bot" "bot" {
   }
 
   lifecycle {
-    ignore_changes = [endpoint]
+    ignore_changes = []
   }
 }
 

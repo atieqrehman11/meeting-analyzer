@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from mcp.app.config.settings import settings
+from app.config.settings import settings
 from typing import Callable
 
 from shared_models.mcp_types import ActionItem

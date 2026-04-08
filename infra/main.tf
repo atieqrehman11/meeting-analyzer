@@ -12,6 +12,11 @@ resource "random_string" "suffix" {
   special = false
 }
 
+resource "random_password" "webhook_secret" {
+  length  = 32
+  special = false
+}
+
 locals {
   # ---------------------------------------------------------------------------
   # Naming convention — Azure CAF prefix pattern
@@ -88,14 +93,14 @@ resource "azurerm_storage_account" "storage" {
 resource "azurerm_storage_container" "transcripts" {
   count                 = local.azure_backend ? 1 : 0
   name                  = "transcripts"
-  storage_account_name  = azurerm_storage_account.storage[0].name
+  storage_account_id    = azurerm_storage_account.storage[0].id
   container_access_type = "private"
 }
 
 resource "azurerm_storage_container" "reports" {
   count                 = local.azure_backend ? 1 : 0
   name                  = "reports"
-  storage_account_name  = azurerm_storage_account.storage[0].name
+  storage_account_id    = azurerm_storage_account.storage[0].id
   container_access_type = "private"
 }
 
@@ -115,6 +120,7 @@ resource "azurerm_cosmosdb_account" "cosmos" {
   geo_location {
     location          = data.azurerm_resource_group.rg.location
     failover_priority = 0
+    zone_redundant    = false
   }
 
   capabilities {

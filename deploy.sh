@@ -58,11 +58,11 @@ cmd_infra_apps() {
     echo ">>> terraform apply (Container Apps — deploy_apps=true)"
     terraform -chdir=infra apply -var-file=terraform.tfvars -var="deploy_apps=true"
 
-    # Set BOT_WEBHOOK_BASE_URL now that the FQDN is known
-    local bot_url rg bot_app
+    local bot_url rg bot_app bot_name
     bot_url=$(tf_output bot_base_url)
     rg=$(tf_output resource_group_name)
     bot_app=$(tf_output bot_app_name)
+    bot_name=$(tf_output bot_service_name 2>/dev/null || true)
 
     if [ -n "$bot_url" ] && [ -n "$bot_app" ]; then
         echo ""
@@ -71,6 +71,16 @@ cmd_infra_apps() {
             --name "$bot_app" \
             --resource-group "$rg" \
             --set-env-vars "BOT_WEBHOOK_BASE_URL=${bot_url}"
+    fi
+
+    # Update Bot Service messaging endpoint now that the real URL is known
+    if [ -n "$bot_name" ] && [ -n "$bot_url" ]; then
+        echo ""
+        echo ">>> Updating Bot Service endpoint to ${bot_url}/api/messages"
+        az bot update \
+            --name "$bot_name" \
+            --resource-group "$rg" \
+            --endpoint "${bot_url}/api/messages"
     fi
 }
 
@@ -84,13 +94,14 @@ cmd_docker() {
         exit 1
     fi
 
+    az acr login --name "${acr%%.*}"
+
     echo ""
     echo ">>> Building and pushing images to ${acr} (tag: ${tag})"
     echo ""
     docker build --no-cache -f mcp/Dockerfile      -t "${acr}/meeting-analyzer-mcp:${tag}" .
     docker build --no-cache -f team_bot/Dockerfile -t "${acr}/meeting-analyzer-bot:${tag}" .
 
-    az acr login --name "${acr%%.*}"
     docker push "${acr}/meeting-analyzer-mcp:${tag}"
     docker push "${acr}/meeting-analyzer-bot:${tag}"
 
@@ -101,6 +112,46 @@ cmd_docker() {
 
     # Deploy Container Apps now that images exist in ACR
     echo ""
+    echo ">>> Deploying Container Apps..."
+    cmd_infra_apps
+}
+
+cmd_docker_mcp() {
+    local tag="${1:-${DOCKER_TAG:-latest}}"
+    local acr="${ACR:-$(tf_output container_registry_login_server)}"
+
+    if [ -z "$acr" ]; then
+        echo "ERROR: Could not resolve ACR login server."
+        echo "  Run infra first, or set ACR=<login-server> in your environment."
+        exit 1
+    fi
+
+    az acr login --name "${acr%%.*}"
+    echo ">>> Building and pushing MCP image (tag: ${tag})"
+    docker build --no-cache -f mcp/Dockerfile -t "${acr}/meeting-analyzer-mcp:${tag}" .
+    docker push "${acr}/meeting-analyzer-mcp:${tag}"
+    echo "Pushed: ${acr}/meeting-analyzer-mcp:${tag}"
+
+    echo ">>> Deploying Container Apps..."
+    cmd_infra_apps
+}
+
+cmd_docker_bot() {
+    local tag="${1:-${DOCKER_TAG:-latest}}"
+    local acr="${ACR:-$(tf_output container_registry_login_server)}"
+
+    if [ -z "$acr" ]; then
+        echo "ERROR: Could not resolve ACR login server."
+        echo "  Run infra first, or set ACR=<login-server> in your environment."
+        exit 1
+    fi
+
+    az acr login --name "${acr%%.*}"
+    echo ">>> Building and pushing bot image (tag: ${tag})"
+    docker build --no-cache -f team_bot/Dockerfile -t "${acr}/meeting-analyzer-bot:${tag}" .
+    docker push "${acr}/meeting-analyzer-bot:${tag}"
+    echo "Pushed: ${acr}/meeting-analyzer-bot:${tag}"
+
     echo ">>> Deploying Container Apps..."
     cmd_infra_apps
 }
@@ -445,6 +496,8 @@ case "$COMMAND" in
     infra-apps)       cmd_infra_apps ;;
     destroy)          cmd_destroy ;;
     docker)           cmd_docker "$TAG" ;;
+    docker-mcp)       cmd_docker_mcp "$TAG" ;;
+    docker-bot)       cmd_docker_bot "$TAG" ;;
     rbac)             cmd_rbac ;;
     graph-consent)    cmd_graph_consent ;;
     admin-checklist)  cmd_admin_checklist ;;
@@ -459,7 +512,9 @@ case "$COMMAND" in
         echo "  infra           terraform init + apply (base infra, excludes Container Apps)"
         echo "  infra-apps      Deploy Container Apps (run after docker push)"
         echo "  destroy         Destroy all provisioned Azure resources (keeps resource group)"
-        echo "  docker          Build + push images to ACR, then deploy Container Apps  [--tag <tag>]"
+        echo "  docker          Build + push both images to ACR, then deploy Container Apps  [--tag <tag>]
+  docker-bot      Build + push only the bot image, then deploy  [--tag <tag>]
+  docker-mcp      Build + push only the MCP image, then deploy  [--tag <tag>]"
         echo "  check-mcp       Verify MCP server is reachable"
         echo "  agents          Register/update agents in Azure AI Foundry"
         echo ""
