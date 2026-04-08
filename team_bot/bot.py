@@ -62,9 +62,12 @@ class TeamsMeetingBot(ActivityHandler):
         text = (turn_context.activity.text or "").strip()
         if turn_context.activity.entities:
             for entity in turn_context.activity.entities:
-                if entity.get("type") == "mention" and \
-                   entity.get("mentioned", {}).get("id") == turn_context.activity.recipient.id:
-                    text = text.replace(entity.get("text", ""), "").strip()
+                entity_type = getattr(entity, "type", None) or (entity.get("type") if isinstance(entity, dict) else None)
+                mentioned = getattr(entity, "mentioned", None) or (entity.get("mentioned") if isinstance(entity, dict) else None)
+                mentioned_id = getattr(mentioned, "id", None) if mentioned else None
+                entity_text = getattr(entity, "text", None) or (entity.get("text") if isinstance(entity, dict) else None)
+                if entity_type == "mention" and mentioned_id == turn_context.activity.recipient.id and entity_text:
+                    text = text.replace(entity_text, "").strip()
         text = text.lower()
 
         if text in ("help", "/help"):

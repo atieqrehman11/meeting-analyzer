@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     global graph_service
 
     logger.info("Team bot starting")
-    logger.info("BOT_APP_ID=%s", settings.bot_app_id[:8] + "..." if settings.bot_app_id else "EMPTY")
+    logger.info("BOT_APP_ID=%s", settings.app_id[:8] + "..." if settings.app_id else "EMPTY")
 
     # Start Graph subscription for proactive meeting join if configured
     graph_service = GraphSubscriptionService(
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
         webhook_url=f"{settings.webhook_base_url.rstrip('/')}/api/graph/webhook",
         webhook_secret=settings.webhook_secret,
         adapter=_get_adapter(),
-        bot_app_id=settings.bot_app_id,
+        bot_app_id=settings.app_id,
     )
     await graph_service.subscribe()
     if graph_service.is_active:

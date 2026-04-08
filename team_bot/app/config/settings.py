@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     port: int = 3978
     reload: bool = False
 
-    bot_app_id: str = ""
-    bot_app_password: str = ""
+    app_id: str = ""
+    app_password: str = ""
     mcp_server_url: str = "http://localhost:8000"
     mcp_retry_max_attempts: int = 3
     mcp_retry_backoff_seconds: list[int] = [1, 2, 4]
