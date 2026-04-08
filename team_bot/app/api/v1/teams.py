@@ -16,26 +16,13 @@ from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def _get_adapter() -> BotFrameworkAdapter:
-    from botframework.connector.auth import SimpleCredentialProvider
     app_id = settings.app_id.strip()
     app_password = settings.app_password.strip()
     logger.info("Initializing adapter with app_id='%s' (len=%d)", app_id, len(app_id))
-
-    # Override is_valid_appid to add diagnostic logging
-    async def _patched_is_valid_appid(self, token_app_id: str) -> bool:
-        result = self.app_id == token_app_id
-        if not result:
-            logger.error(
-                "AppId mismatch: token='%s'(len=%d) stored='%s'(len=%d)",
-                token_app_id, len(token_app_id),
-                self.app_id, len(self.app_id)
-            )
-        return result
-    SimpleCredentialProvider.is_valid_appid = _patched_is_valid_appid
-
     return BotFrameworkAdapter(BotFrameworkAdapterSettings(
         app_id=app_id,
         app_password=app_password,
+        channel_auth_tenant=settings.graph_tenant_id,
     ))
 
 manager = MeetingOrchestratorManager(build_meeting_orchestrator)

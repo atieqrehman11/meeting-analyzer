@@ -18,16 +18,13 @@ _CONFIG_PAGE = """<!DOCTYPE html>
     .card {{ background: white; border-radius: 8px; padding: 2rem; max-width: 480px; margin: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
     h2 {{ color: #0078d4; margin-top: 0; }}
     p {{ color: #444; }}
-    button {{ background: #0078d4; color: white; border: none; padding: 0.6rem 1.4rem; border-radius: 4px; font-size: 1rem; cursor: pointer; }}
-    button:hover {{ background: #106ebe; }}
   </style>
 </head>
 <body>
   <div class="card">
     <h2>&#x1F4CB; {app_name}</h2>
     <p>Add <strong>{app_name}</strong> to this meeting to automatically capture transcripts and generate AI-powered insights after the meeting ends.</p>
-    <p>No additional configuration is required.</p>
-    <button onclick="save()">Add to Meeting</button>
+    <p>No additional configuration is required. Click <strong>Save</strong> to activate.</p>
   </div>
   <script>
     microsoftTeams.app.initialize().then(() => {{
@@ -36,22 +33,14 @@ _CONFIG_PAGE = """<!DOCTYPE html>
           suggestedDisplayName: "{app_name}",
           entityId: "meeting-assistant-tab",
           contentUrl: window.location.origin + "/tab/content",
-          websiteUrl: window.location.origin
+          websiteUrl: window.location.origin,
+          removeUrl: window.location.origin + "/tab/remove"
         }});
         saveEvent.notifySuccess();
       }});
+      // Enable the Save button immediately — no user input needed
       microsoftTeams.pages.config.setValidityState(true);
     }});
-
-    function save() {{
-      microsoftTeams.pages.config.setConfig({{
-        suggestedDisplayName: "{app_name}",
-        entityId: "meeting-assistant-tab",
-        contentUrl: window.location.origin + "/tab/content",
-        websiteUrl: window.location.origin
-      }});
-      microsoftTeams.pages.config.setValidityState(true);
-    }}
   </script>
 </body>
 </html>"""

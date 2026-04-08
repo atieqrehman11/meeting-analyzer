@@ -58,63 +58,51 @@ class TeamsMeetingBot(ActivityHandler):
         self._manager = manager
 
     async def on_message_activity(self, turn_context: TurnContext) -> None:
-        # Strip bot mention (e.g. "@Meeting Assistant status" → "status")
-        text = (turn_context.activity.text or "").strip()
-        if turn_context.activity.entities:
-            for entity in turn_context.activity.entities:
-                entity_type = getattr(entity, "type", None) or (entity.get("type") if isinstance(entity, dict) else None)
-                mentioned = getattr(entity, "mentioned", None) or (entity.get("mentioned") if isinstance(entity, dict) else None)
-                mentioned_id = getattr(mentioned, "id", None) if mentioned else None
-                entity_text = getattr(entity, "text", None) or (entity.get("text") if isinstance(entity, dict) else None)
-                if entity_type == "mention" and mentioned_id == turn_context.activity.recipient.id and entity_text:
-                    text = text.replace(entity_text, "").strip()
-        text = text.lower()
+        text = self._strip_mention(turn_context).lower()
+        response = self._get_command_response(text)
+        await turn_context.send_activity(response)
 
+    def _strip_mention(self, turn_context: TurnContext) -> str:
+        """Remove bot @mention prefix from message text."""
+        text = (turn_context.activity.text or "").strip()
+        bot_id = turn_context.activity.recipient.id
+        for entity in turn_context.activity.entities or []:
+            if getattr(entity, "type", None) != "mention":
+                continue
+            if getattr(getattr(entity, "mentioned", None), "id", None) == bot_id:
+                mention_text = getattr(entity, "text", "") or ""
+                text = text.replace(mention_text, "").strip()
+        return text
+
+    def _get_command_response(self, text: str) -> str:
+        """Return the appropriate response string for a given command."""
+        name = settings.app_display_name
         if text in ("help", "/help"):
-            await turn_context.send_activity(
-                f"**{settings.app_display_name}** — available commands:\n\n"
-                "• **help** — show this message\n"
-                "• **status** — show active meeting analysis status\n\n"
-                "Add me to a Teams meeting to start capturing transcripts and generating insights."
-            )
-        elif text in ("status", "/status"):
-            await turn_context.send_activity(
-                f"{settings.app_display_name} is running. Add me to a meeting to begin analysis."
-            )
-        else:
-            await turn_context.send_activity(
-                f"Hi! I'm **{settings.app_display_name}**. "
-                "Add me to a Teams meeting to start capturing transcripts and generating insights. "
-                "Type **help** to see available commands."
-            )
+            return settings.msg_help.format(name=name)
+        if text in ("status", "/status"):
+            return settings.msg_status.format(name=name)
+        return settings.msg_default.format(name=name)
 
     async def on_conversation_update_activity(self, turn_context: TurnContext) -> None:
         activity = turn_context.activity
-
-        # Send welcome message when bot is added to a team or chat
-        if activity.members_added:
-            for member in activity.members_added:
-                if getattr(member, "id", None) == activity.recipient.id:
-                    await turn_context.send_activity(
-                        f"👋 Hi! I'm **{settings.app_display_name}**. "
-                        "Add me to a Teams meeting to start capturing transcripts and generating post-meeting insights. "
-                        "Type **help** to see available commands."
-                    )
-
         meeting_id = self._extract_meeting_id(activity)
-        if not meeting_id:
-            return
 
-        if activity.members_added:
-            if self._bot_joined(activity.members_added, activity.recipient.id):
+        if activity.members_added and self._bot_joined(activity.members_added, activity.recipient.id):
+            # Only send welcome and start meeting if this is a meeting context
+            if meeting_id:
+                await turn_context.send_activity(
+                    settings.msg_welcome.format(name=settings.app_display_name)
+                )
                 participant_roster = self._extract_participant_roster(activity)
                 await self._manager.start_meeting(meeting_id, participant_roster)
             else:
-                logger.info("Participant joined meeting %s", meeting_id)
+                logger.info("Bot added to non-meeting chat — skipping welcome")
 
-        if activity.members_removed:
-            if self._bot_left(activity.members_removed, activity.recipient.id):
-                await self._manager.end_meeting(meeting_id)
+        elif activity.members_added:
+            logger.info("Participant joined meeting %s", meeting_id)
+
+        if activity.members_removed and self._bot_left(activity.members_removed, activity.recipient.id):
+            await self._manager.end_meeting(meeting_id)
 
     async def on_event_activity(self, turn_context: TurnContext) -> None:
         activity = turn_context.activity

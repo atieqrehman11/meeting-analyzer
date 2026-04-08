@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.20/MicrosoftTeams.schema.json",
   "manifestVersion": "1.20",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "id": "b207a8f4-8369-4fcc-8a03-f2b418a56fd5",
   "developer": {
     "name": "Meeting Assistant",
-    "websiteUrl": "https://example.com",
-    "privacyUrl": "https://example.com/privacy",
-    "termsOfUseUrl": "https://example.com/terms"
+    "websiteUrl": "https://www.microsoft.com",
+    "privacyUrl": "https://www.microsoft.com/en-us/privacy",
+    "termsOfUseUrl": "https://www.microsoft.com/terms"
   },
   "name": {
     "short": "Meeting Assistant",
@@ -44,12 +44,24 @@
     "supportsStreaming": false,
     "supportsAnonymousGuestUsers": false
   },
-  "configurableTabs": [],
+  "configurableTabs": [
+    {
+      "configurationUrl": "https://ca-meetingassist-bot-dev-eastus.proudbay-1fefc57d.eastus.azurecontainerapps.io/tab/config",
+      "canUpdateConfiguration": false,
+      "scopes": ["groupChat"],
+      "context": [
+        "meetingChatTab",
+        "meetingDetailsTab",
+        "meetingSidePanel"
+      ]
+    }
+  ],
   "permissions": ["identity", "messageTeamMembers"],
   "validDomains": [
     "ca-meetingassist-bot-dev-eastus.proudbay-1fefc57d.eastus.azurecontainerapps.io",
     "ca-meetingassist-mcp-dev-eastus.proudbay-1fefc57d.eastus.azurecontainerapps.io",
-    "token.botframework.com"
+    "token.botframework.com",
+    "teams.cloud.microsoft"
   ],
   "webApplicationInfo": {
     "id": "b207a8f4-8369-4fcc-8a03-f2b418a56fd5",

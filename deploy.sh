@@ -56,7 +56,16 @@ cmd_infra() {
 cmd_infra_apps() {
     # Deploy Container Apps — run after images are pushed to ACR
     echo ">>> terraform apply (Container Apps — deploy_apps=true)"
-    terraform -chdir=infra apply -var-file=terraform.tfvars -var="deploy_apps=true"
+    local attempt=1
+    until terraform -chdir=infra apply -var-file=terraform.tfvars -var="deploy_apps=true" -parallelism=3; do
+        attempt=$((attempt + 1))
+        if [ $attempt -gt 3 ]; then
+            echo "ERROR: terraform apply failed after 3 attempts."
+            exit 1
+        fi
+        echo ">>> Retrying terraform apply (attempt $attempt/3)..."
+        sleep 10
+    done
 
     local bot_url rg bot_app bot_name
     bot_url=$(tf_output bot_base_url)
@@ -154,6 +163,16 @@ cmd_docker_bot() {
 
     echo ">>> Deploying Container Apps..."
     cmd_infra_apps
+
+    echo ">>> Restarting bot Container App..."
+    local rg bot_app
+    rg=$(tf_output resource_group_name)
+    bot_app=$(tf_output bot_app_name)
+    az containerapp revision restart \
+        --name "$bot_app" \
+        --resource-group "$rg" \
+        --revision "$(az containerapp revision list --name "$bot_app" --resource-group "$rg" --query "[?properties.active].name | [0]" -o tsv)"
+    echo "Bot restarted."
 }
 
 cmd_rbac() {

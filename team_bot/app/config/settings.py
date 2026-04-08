@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     # Secret token sent with every Graph notification — used to validate authenticity
     webhook_secret: str = "change-me-in-production"
 
+    # Bot response messages
+    msg_welcome: str = "👋 **{name}** is now active in this meeting. I'll deliver AI-powered insights when the meeting ends. Type **help** to see available commands."
+    msg_default: str = "I'm **{name}**. I will help generate post-meeting insights including action items, agenda adherence, and sentiment analysis. Type **help** to get started."
+    msg_status: str = "✅ **{name}** is running and ready. Add me to a meeting to begin generating insights."
+    msg_help: str = "**{name}** — commands:\n\n• **help** — show this message\n• **status** — check if the bot is running\n\nTo use: add me to a Teams meeting. I'll post a summary with action items when the meeting ends."
+
     model_config = {"env_prefix": "BOT_", "case_sensitive": False}
 
 

@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "pydantic-settings>=2.3.0",
     "azure-ai-projects>=2.0.0",
+    "azure-ai-agents>=1.0.0",
     "azure-identity>=1.17.0",
     "meeting-shared-models",
 ]
