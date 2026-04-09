@@ -62,7 +62,7 @@ async def messages(request: Request, authorization: Annotated[str | None, Header
     activity = Activity().deserialize(body)
     auth_header = authorization or ""
 
-    logger.debug("Incoming activity: body=%s auth_header=%s", body, auth_header)
+    logger.debug("Incoming activity: body=%s", body)
     try:
         response = await _get_adapter().process_activity(activity, auth_header, bot.on_turn)
         

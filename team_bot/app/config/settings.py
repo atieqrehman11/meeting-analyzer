@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://localhost:8000"
     mcp_retry_max_attempts: int = 3
     mcp_retry_backoff_seconds: list[int] = [1, 2, 4]
-    log_level: str = "INFO"
+    log_level: str = "DEBUG"
 
     # Microsoft Graph — required for proactive meeting join via webhook
     # Application permissions needed: OnlineMeetings.Read.All, Calendars.Read

@@ -26,25 +26,29 @@ class MeetingOrchestratorManager:
 
     async def start_meeting(self, meeting_id: str, participant_roster: list[dict[str, Any]]) -> None:
         if meeting_id in self._active_meetings:
-            logger.info("Meeting %s is already active", meeting_id)
+            logger.info("[MEETING] Already active — skipping start: %s", meeting_id)
             return
 
+        logger.info("[MEETING] Starting meeting: %s (participants: %d)", meeting_id, len(participant_roster))
         orchestrator, mcp_client = self._orchestrator_factory(meeting_id, participant_roster)
         self._active_meetings[meeting_id] = (orchestrator, mcp_client)
 
-        logger.info("Starting orchestrator for meeting %s", meeting_id)
+        logger.info("[MEETING] Orchestrator created, calling on_meeting_start: %s", meeting_id)
         await orchestrator.on_meeting_start(meeting_id, participant_roster)
+        logger.info("[MEETING] on_meeting_start complete: %s", meeting_id)
 
     async def end_meeting(self, meeting_id: str) -> None:
         pair = self._active_meetings.pop(meeting_id, None)
         if pair is None:
-            logger.warning("No active meeting found for %s", meeting_id)
+            logger.warning("[MEETING] end_meeting called but no active meeting found: %s", meeting_id)
             return
 
         orchestrator, mcp_client = pair
-        logger.info("Ending orchestrator for meeting %s", meeting_id)
+        logger.info("[MEETING] Ending meeting: %s", meeting_id)
         await orchestrator.on_meeting_end(meeting_id)
+        logger.info("[MEETING] on_meeting_end complete, closing MCP client: %s", meeting_id)
         await mcp_client.aclose()
+        logger.info("[MEETING] Meeting fully closed: %s", meeting_id)
 
     async def shutdown(self) -> None:
         for meeting_id in list(self._active_meetings):
@@ -56,9 +60,13 @@ class TeamsMeetingBot(ActivityHandler):
 
     def __init__(self, manager: MeetingOrchestratorManager) -> None:
         self._manager = manager
+        self._welcomed_meetings: set[str] = set()  # prevent duplicate welcome messages
 
     async def on_message_activity(self, turn_context: TurnContext) -> None:
         text = self._strip_mention(turn_context).lower()
+        if not text:
+            # Empty message after stripping mention — ignore (e.g. bot install notification)
+            return
         response = self._get_command_response(text)
         await turn_context.send_activity(response)
 
@@ -87,32 +95,76 @@ class TeamsMeetingBot(ActivityHandler):
         activity = turn_context.activity
         meeting_id = self._extract_meeting_id(activity)
 
+        logger.info(
+            "[EVENT] conversationUpdate — meeting_id=%s members_added=%s members_removed=%s",
+            meeting_id,
+            [getattr(m, "id", None) for m in (activity.members_added or [])],
+            [getattr(m, "id", None) for m in (activity.members_removed or [])],
+        )
+
         if activity.members_added and self._bot_joined(activity.members_added, activity.recipient.id):
-            # Only send welcome and start meeting if this is a meeting context
             if meeting_id:
-                await turn_context.send_activity(
-                    settings.msg_welcome.format(name=settings.app_display_name)
-                )
-                participant_roster = self._extract_participant_roster(activity)
-                await self._manager.start_meeting(meeting_id, participant_roster)
+                meeting_in_progress = self._is_meeting_in_progress(activity)
+                logger.info("[EVENT] Bot joined meeting chat — in_progress=%s meeting_id=%s", meeting_in_progress, meeting_id)
+                if meeting_id not in self._welcomed_meetings:
+                    self._welcomed_meetings.add(meeting_id)
+                    await turn_context.send_activity(
+                        settings.msg_welcome.format(name=settings.app_display_name)
+                    )
+                else:
+                    logger.debug("[EVENT] Welcome already sent for meeting %s — skipping", meeting_id)
+                if meeting_in_progress:
+                    participant_roster = self._extract_participant_roster(activity)
+                    await self._manager.start_meeting(meeting_id, participant_roster)
+                else:
+                    logger.info("[EVENT] Meeting not yet started — orchestrator will start on meetingStart event")
             else:
-                logger.info("Bot added to non-meeting chat — skipping welcome")
+                logger.info("[EVENT] Bot added to non-meeting chat — skipping")
 
         elif activity.members_added:
-            logger.info("Participant joined meeting %s", meeting_id)
+            logger.info("[EVENT] Participant(s) joined meeting %s", meeting_id)
 
         if activity.members_removed and self._bot_left(activity.members_removed, activity.recipient.id):
+            logger.info("[EVENT] Bot removed from meeting chat — triggering end_meeting: %s", meeting_id)
             await self._manager.end_meeting(meeting_id)
 
     async def on_event_activity(self, turn_context: TurnContext) -> None:
         activity = turn_context.activity
-        if activity.name == "participantJoined":
-            meeting_id = self._extract_meeting_id(activity)
-            logger.info("Late joiner event for meeting %s", meeting_id)
-            # Late joiner consent flow should be implemented here.
+        meeting_id = self._extract_meeting_id(activity)
+
+        logger.info("[EVENT] event activity — name=%s meeting_id=%s", activity.name, meeting_id)
+
+        if activity.name == "meetingStart":
+            logger.info("[EVENT] meetingStart received — starting orchestrator: %s", meeting_id)
+            if meeting_id:
+                participant_roster = self._extract_participant_roster(activity)
+                await self._manager.start_meeting(meeting_id, participant_roster)
+        elif activity.name == "meetingEnd":
+            logger.info("[EVENT] meetingEnd received — ending orchestrator: %s", meeting_id)
+            if meeting_id:
+                await self._manager.end_meeting(meeting_id)
+        elif activity.name == "participantJoined":
+            logger.info("[EVENT] Participant joined meeting %s", meeting_id)
         elif activity.name == "participantLeft":
-            meeting_id = self._extract_meeting_id(activity)
-            logger.info("Participant left event for meeting %s", meeting_id)
+            logger.info("[EVENT] Participant left meeting %s", meeting_id)
+        elif activity.name in ("endOfConversation",):
+            logger.info("[EVENT] endOfConversation — ending orchestrator: %s", meeting_id)
+            if meeting_id:
+                await self._manager.end_meeting(meeting_id)
+
+    async def on_end_of_conversation_activity(self, turn_context: TurnContext) -> None:
+        meeting_id = self._extract_meeting_id(turn_context.activity)
+        logger.info("[EVENT] endOfConversation activity — meeting_id=%s", meeting_id)
+        if meeting_id:
+            await self._manager.end_meeting(meeting_id)
+
+    def _is_meeting_in_progress(self, activity: Activity) -> bool:
+        """Check if the meeting is currently active via channelData."""
+        channel_data = getattr(activity, "channel_data", {}) or {}
+        meeting = channel_data.get("meeting") or {}
+        conv = getattr(activity, "conversation", None)
+        conv_type = getattr(conv, "conversation_type", "") or ""
+        return bool(meeting.get("id")) and conv_type == "groupChat"
 
     def _extract_meeting_id(self, activity: Activity) -> str | None:
         channel_data = getattr(activity, "channel_data", {}) or {}

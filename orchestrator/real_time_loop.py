@@ -43,7 +43,6 @@ class RealTimeLoop:
         self._meeting_id = meeting_id
         self._record = record
         self._mcp = mcp
-        self._cfg = cfg
         # Agenda is sourced from the calendar event at meeting start.
         # Falls back to empty list if not provided (no-agenda meeting).
         self._agenda: list[str] = agenda or []
@@ -52,6 +51,22 @@ class RealTimeLoop:
         # Falls back to record.end_time if not explicitly provided.
         raw_end = scheduled_end_time or getattr(record, "end_time", None)
         self._scheduled_end: Optional[datetime] = _parse_iso(raw_end)
+
+        # Scale time-sensitive thresholds to meeting duration
+        from orchestrator.config_scaler import ConfigScaler
+        self._cfg = ConfigScaler().scale(cfg, self._scheduled_end)
+
+        logger.debug(
+            "[RealTimeLoop] Created for meeting=%s agenda_topics=%d scheduled_end=%s "
+            "start_delay=%ds interval=%ds purpose_delay=%ds pulse_interval=%dm",
+            meeting_id,
+            len(self._agenda),
+            self._scheduled_end.isoformat() if self._scheduled_end else "none",
+            self._cfg.realtime_loop_start_delay_seconds,
+            self._cfg.realtime_loop_interval_seconds,
+            self._cfg.purpose_detection_delay_seconds,
+            self._cfg.participation_pulse_interval_minutes,
+        )
 
         # Agenda adherence state
         self._similarity_buffer: list[float] = []
@@ -78,9 +93,10 @@ class RealTimeLoop:
 
     async def run(self) -> None:
         """Main loop — waits for start delay then ticks at configured interval."""
-        logger.info("RealTimeLoop starting for meeting %s (delay=%ds)",
+        logger.debug("[RealTimeLoop] Starting for meeting=%s delay=%ds",
                     self._meeting_id, self._cfg.realtime_loop_start_delay_seconds)
         await asyncio.sleep(self._cfg.realtime_loop_start_delay_seconds)
+        logger.debug("[RealTimeLoop] Delay complete, entering tick loop for meeting=%s", self._meeting_id)
 
         while True:
             await self._tick()
@@ -91,12 +107,14 @@ class RealTimeLoop:
     # ------------------------------------------------------------------
 
     async def _tick(self) -> None:
+        logger.debug("[RealTimeLoop] Tick — meeting=%s", self._meeting_id)
         now = time.monotonic()
         await self._check_agenda_adherence()
         await self._check_purpose(now)
         self._check_tone()
         await self._check_participation_pulse(now)
         await self._check_time_remaining()
+        logger.debug("[RealTimeLoop] Tick complete — meeting=%s", self._meeting_id)
 
     # ------------------------------------------------------------------
     # 1. Agenda adherence
@@ -104,7 +122,9 @@ class RealTimeLoop:
 
     async def _check_agenda_adherence(self) -> None:
         if not self._agenda:
+            logger.debug("[RealTimeLoop] Agenda adherence skipped — no agenda topics")
             return
+        logger.debug("[RealTimeLoop] Checking agenda adherence — meeting=%s topics=%d", self._meeting_id, len(self._agenda))
 
         try:
             result = await self._mcp.compute_similarity(
@@ -165,6 +185,7 @@ class RealTimeLoop:
 
     async def _check_purpose(self, now: float) -> None:
         delay = self._cfg.purpose_detection_delay_seconds
+        logger.debug("[RealTimeLoop] Purpose check — meeting=%s detected=%s", self._meeting_id, self._purpose_detected)
 
         if not self._purpose_detected:
             if self._purpose_detected_at is None:
@@ -230,7 +251,9 @@ class RealTimeLoop:
     async def _check_participation_pulse(self, now: float) -> None:
         interval_seconds = self._cfg.participation_pulse_interval_minutes * 60
         if self._last_pulse_at is not None and (now - self._last_pulse_at) < interval_seconds:
+            logger.debug("[RealTimeLoop] Pulse skipped — next in %.0fs", interval_seconds - (now - self._last_pulse_at))
             return
+        logger.debug("[RealTimeLoop] Running participation pulse — meeting=%s snapshot=%d", self._meeting_id, self._pulse_snapshot_count)
 
         self._last_pulse_at = now
 
@@ -290,11 +313,15 @@ class RealTimeLoop:
         Fires once per meeting only.
         """
         if self._time_remaining_sent or self._scheduled_end is None:
+            logger.debug("[RealTimeLoop] Time remaining check skipped — sent=%s has_end=%s",
+                        self._time_remaining_sent, self._scheduled_end is not None)
             return
 
         now_utc = datetime.now(timezone.utc)
         remaining_seconds = (self._scheduled_end - now_utc).total_seconds()
         threshold_seconds = self._cfg.time_remaining_alert_minutes * 60
+        logger.debug("[RealTimeLoop] Time remaining — meeting=%s remaining=%.0fs threshold=%ds",
+                    self._meeting_id, remaining_seconds, threshold_seconds)
 
         if remaining_seconds > threshold_seconds or remaining_seconds <= 0:
             return

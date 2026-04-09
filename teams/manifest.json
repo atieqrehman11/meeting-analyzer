@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.20/MicrosoftTeams.schema.json",
   "manifestVersion": "1.20",
-  "version": "1.0.3",
+  "version": "1.0.9",
   "id": "b207a8f4-8369-4fcc-8a03-f2b418a56fd5",
   "developer": {
     "name": "Meeting Assistant",
@@ -25,34 +25,17 @@
   "bots": [
     {
       "botId": "b207a8f4-8369-4fcc-8a03-f2b418a56fd5",
-      "scopes": ["team", "groupChat"],
+      "scopes": ["personal", "team", "groupChat"],
       "supportsFiles": false,
       "isNotificationOnly": false,
       "commandLists": [
         {
-          "scopes": ["team", "groupChat"],
+          "scopes": ["personal", "team", "groupChat"],
           "commands": [
             { "title": "help", "description": "Show available commands" },
             { "title": "status", "description": "Show current meeting analysis status" }
           ]
         }
-      ]
-    }
-  ],
-  "meetingExtensionDefinition": {
-    "scenes": [],
-    "supportsStreaming": false,
-    "supportsAnonymousGuestUsers": false
-  },
-  "configurableTabs": [
-    {
-      "configurationUrl": "https://ca-meetingassist-bot-dev-eastus.proudbay-1fefc57d.eastus.azurecontainerapps.io/tab/config",
-      "canUpdateConfiguration": false,
-      "scopes": ["groupChat"],
-      "context": [
-        "meetingChatTab",
-        "meetingDetailsTab",
-        "meetingSidePanel"
       ]
     }
   ],

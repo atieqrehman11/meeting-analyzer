@@ -41,6 +41,9 @@ class OrchestratorConfig(BaseSettings):
     # Time remaining wrap-up alert
     time_remaining_alert_minutes: int = 5  # send alert when this many minutes remain
 
+    # Config scaling — meetings shorter than this get proportionally scaled thresholds
+    config_scale_threshold_minutes: int = 30
+
     # Logging
     log_level: str = "INFO"
 
