@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1.router import router
+from app.api.mcp_protocol import router as mcp_router
 from app.common.exceptions import register_exception_handlers
 from app.common.logger import logger
 from app.config.settings import settings
@@ -48,6 +49,7 @@ app = FastAPI(
 
 register_exception_handlers(app)
 app.include_router(router)
+app.include_router(mcp_router)
 
 
 if __name__ == "__main__":

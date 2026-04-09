@@ -64,8 +64,21 @@ class TeamsMeetingBot(ActivityHandler):
 
     async def on_message_activity(self, turn_context: TurnContext) -> None:
         text = self._strip_mention(turn_context).lower()
+        activity = turn_context.activity
+        meeting_id = self._extract_meeting_id(activity)
+
+        # Auto-start orchestrator on first message in a meeting chat
+        if meeting_id and meeting_id not in self._manager._active_meetings:
+            logger.info("[EVENT] First message in meeting chat — auto-starting orchestrator: %s", meeting_id)
+            participant_roster = self._extract_participant_roster(activity)
+            await self._manager.start_meeting(meeting_id, participant_roster)
+            if meeting_id not in self._welcomed_meetings:
+                self._welcomed_meetings.add(meeting_id)
+                await turn_context.send_activity(
+                    settings.msg_welcome.format(name=settings.app_display_name)
+                )
+
         if not text:
-            # Empty message after stripping mention — ignore (e.g. bot install notification)
             return
         response = self._get_command_response(text)
         await turn_context.send_activity(response)
@@ -164,7 +177,9 @@ class TeamsMeetingBot(ActivityHandler):
         meeting = channel_data.get("meeting") or {}
         conv = getattr(activity, "conversation", None)
         conv_type = getattr(conv, "conversation_type", "") or ""
-        return bool(meeting.get("id")) and conv_type == "groupChat"
+        logger.debug("[EVENT] _is_meeting_in_progress — meeting=%s conv_type=%s channel_data_keys=%s",
+                     meeting, conv_type, list(channel_data.keys()))
+        return bool(meeting.get("id"))
 
     def _extract_meeting_id(self, activity: Activity) -> str | None:
         channel_data = getattr(activity, "channel_data", {}) or {}

@@ -57,10 +57,11 @@ class RealTimeLoop:
         self._cfg = ConfigScaler().scale(cfg, self._scheduled_end)
 
         logger.debug(
-            "[RealTimeLoop] Created for meeting=%s agenda_topics=%d scheduled_end=%s "
+            "[RealTimeLoop] Created for meeting=%s agenda_topics=%d %s scheduled_end=%s "
             "start_delay=%ds interval=%ds purpose_delay=%ds pulse_interval=%dm",
             meeting_id,
             len(self._agenda),
+            self._agenda if self._agenda else "(none)",
             self._scheduled_end.isoformat() if self._scheduled_end else "none",
             self._cfg.realtime_loop_start_delay_seconds,
             self._cfg.realtime_loop_interval_seconds,
@@ -86,10 +87,19 @@ class RealTimeLoop:
 
         # Time remaining state — fire once only
         self._time_remaining_sent: bool = False
+        # Transcript state — skip realtime checks until first segment captured
+        self._has_transcript: bool = False
+        self._tick_count: int = 0
 
     # ------------------------------------------------------------------
     # Entry point
     # ------------------------------------------------------------------
+
+    def notify_transcript_captured(self) -> None:
+        """Called by Orchestrator when a transcript segment is successfully captured."""
+        if not self._has_transcript:
+            logger.info("[RealTimeLoop] First transcript captured — enabling realtime checks for meeting=%s", self._meeting_id)
+        self._has_transcript = True
 
     async def run(self) -> None:
         """Main loop — waits for start delay then ticks at configured interval."""
@@ -109,6 +119,13 @@ class RealTimeLoop:
     async def _tick(self) -> None:
         logger.debug("[RealTimeLoop] Tick — meeting=%s", self._meeting_id)
         now = time.monotonic()
+        # Skip checks until transcript is captured OR 2 intervals have passed (agent may be slow)
+        if not self._has_transcript and self._tick_count < 2:
+            self._tick_count += 1
+            logger.debug("[RealTimeLoop] Skipping tick — no transcript yet (tick %d/2)", self._tick_count)
+            await self._check_time_remaining()
+            return
+        self._tick_count += 1
         await self._check_agenda_adherence()
         await self._check_purpose(now)
         self._check_tone()

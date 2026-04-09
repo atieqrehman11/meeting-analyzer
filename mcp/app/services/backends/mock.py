@@ -80,14 +80,16 @@ class MockDatabaseBackend(DatabaseBackend):
 
 class MockGraphBackend(GraphBackend):
     async def get_calendar_event(self, meeting_id: str) -> dict:
+        from datetime import datetime, timezone, timedelta
         logger.debug("MockGraph: get_calendar_event(%s)", meeting_id)
+        now = datetime.now(timezone.utc)
         return {
             "meeting_id": meeting_id,
             "subject": "Mock Meeting",
             "description": "Agenda: 1. Status update 2. Action items",
             "agenda": ["Status update", "Action items"],
-            "start_time": "2026-01-01T10:00:00Z",
-            "end_time": "2026-01-01T11:00:00Z",
+            "start_time": now.isoformat(),
+            "end_time": (now + timedelta(minutes=30)).isoformat(),
             "organizer_id": "mock-organizer",
             "organizer_name": "Mock Organizer",
         }

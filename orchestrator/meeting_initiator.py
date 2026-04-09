@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from shared_models.mcp_client import BaseMcpClient, McpCallError
 from shared_models.mcp_types import CalendarEventOutput, MeetingRecord
+from shared_models.meeting_id import to_storage_key
 
 logger = logging.getLogger("orchestrator.meeting_initiator")
 
@@ -69,12 +70,13 @@ def _build_meeting_record(
     now = datetime.now(timezone.utc).isoformat()
     participants = [p["id"] for p in participant_roster if "id" in p]
     return MeetingRecord(
-        id=f"meeting_{meeting_id}",
+        id=f"meeting_{to_storage_key(meeting_id)}",
         meeting_id=meeting_id,
         organizer_id=calendar.organizer_id,
         organizer_name=calendar.organizer_name,
         subject=calendar.subject,
         start_time=calendar.start_time,
+        end_time=calendar.end_time,
         participants=participants,
         stage="transcribing",
         created_at=now,

@@ -45,7 +45,7 @@ class OrchestratorConfig(BaseSettings):
     config_scale_threshold_minutes: int = 30
 
     # Logging
-    log_level: str = "INFO"
+    log_level: str = "DEBUG"
 
     model_config = {"env_prefix": "ORCH_", "case_sensitive": False}
 

@@ -122,12 +122,11 @@ case "${1:-help}" in
         echo "  Swagger : http://localhost:${BOT_PORT:-3978}/docs"
         echo ""
         echo "Press Ctrl+C to stop."
-        reload_arg=""
-        [ "${BOT_RELOAD:-false}" = "true" ] && reload_arg="--reload"
+
         python3 -m uvicorn "team_bot.main:app" \
             --host "${BOT_HOST:-0.0.0.0}" \
             --port "${BOT_PORT:-3978}" \
-            $reload_arg &
+            --reload &
         BOT_PID=$!
         wait
         ;;

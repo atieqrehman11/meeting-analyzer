@@ -143,6 +143,16 @@ cmd_docker_mcp() {
 
     echo ">>> Deploying Container Apps..."
     cmd_infra_apps
+
+    echo ">>> Restarting MCP Container App..."
+    local rg mcp_app
+    rg=$(tf_output resource_group_name)
+    mcp_app=$(tf_output mcp_app_name)
+    az containerapp update \
+        --name "$mcp_app" \
+        --resource-group "$rg" \
+        --image "${acr}/meeting-analyzer-mcp:${tag}"
+    echo "MCP restarted."
 }
 
 cmd_docker_bot() {
@@ -168,10 +178,10 @@ cmd_docker_bot() {
     local rg bot_app
     rg=$(tf_output resource_group_name)
     bot_app=$(tf_output bot_app_name)
-    az containerapp revision restart \
+    az containerapp update \
         --name "$bot_app" \
         --resource-group "$rg" \
-        --revision "$(az containerapp revision list --name "$bot_app" --resource-group "$rg" --query "[?properties.active].name | [0]" -o tsv)"
+        --image "${acr}/meeting-analyzer-bot:${tag}"
     echo "Bot restarted."
 }
 

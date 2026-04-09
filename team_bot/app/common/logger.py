@@ -7,7 +7,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 
-for _noisy in ("httpx", "httpcore", "azure"):
+for _noisy in ("httpx", "httpcore", "azure", "urllib3", "msrest", "msal"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 logger = logging.getLogger("team_bot")

@@ -7,6 +7,7 @@ from shared_models.mcp_types import (
 )
 from app.dependencies import DatabaseDep, GraphDep
 from app.common.exceptions import FeatureNotEnabledError
+from app.common.meeting_id import decode_meeting_id
 from app.config.settings import settings
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
@@ -25,7 +26,7 @@ async def send_realtime_alert(body: SendRealtimeAlertInput, graph: GraphDep):
     if body.alert_type not in _REALTIME_ALERT_TYPES:
         raise FeatureNotEnabledError(f"send_realtime_alert:{body.alert_type}")
     await graph.send_realtime_alert(
-        body.meeting_id, body.alert_type, body.card_payload, body.target_participant_ids
+        decode_meeting_id(body.meeting_id), body.alert_type, body.card_payload, body.target_participant_ids
     )
 
 

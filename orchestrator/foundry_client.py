@@ -50,13 +50,18 @@ def build_foundry_client(config: OrchestratorConfig) -> "FoundryClient | MockFou
 
 
 def load_agent_ids() -> dict[str, str]:
-    """Load agent ID mapping from agent_ids.json next to this file."""
+    """Load agent ID mapping from agent_ids.json next to this file.
+
+    Normalises keys by stripping the '-agent' suffix so callers can use
+    short keys: 'transcript', 'analysis', 'sentiment'.
+    """
     if not _AGENT_IDS_FILE.exists():
         raise FileNotFoundError(
             f"Agent IDs file not found: {_AGENT_IDS_FILE}. "
             "Run deploy/register_agents.py to generate it."
         )
-    return json.loads(_AGENT_IDS_FILE.read_text())
+    raw = json.loads(_AGENT_IDS_FILE.read_text())
+    return {k.replace("-agent", ""): v for k, v in raw.items()}
 
 
 class MockFoundryClient:
@@ -147,16 +152,24 @@ class FoundryClient:
 
     def _dispatch_sync(self, agent_id: str, task: dict) -> dict:
         """Synchronous Foundry call — runs in a thread via dispatch()."""
-        thread = self._client.create_thread()
-        self._client.create_message(
+        import json as _json
+        thread = self._client.threads.create()
+        self._client.messages.create(
             thread_id=thread.id,
             role="user",
-            content=json.dumps(task),
+            content=_json.dumps(task),
         )
-        self._client.create_and_process_run(
+        run = self._client.runs.create_and_process(
             thread_id=thread.id,
             agent_id=agent_id,
         )
-        messages = self._client.list_messages(thread_id=thread.id)
-        # First message in the list is the latest assistant response
-        return json.loads(messages.data[0].content[0].text.value)
+        if run.status == "failed":
+            logger.error("Agent run failed: %s", run.last_error)
+            return {"status": "error", "error": str(run.last_error)}
+
+        messages = self._client.messages.list(thread_id=thread.id)
+        # Get the last assistant message
+        for msg in messages:
+            if msg.role == "assistant" and msg.text_messages:
+                return _json.loads(msg.text_messages[-1].text.value)
+        return {"status": "error", "error": "No response from agent"}

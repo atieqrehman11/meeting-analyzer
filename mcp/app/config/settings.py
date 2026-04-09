@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     app_name: str = "Meeting Bot MCP Server"
     app_display_name: str = "Meeting Assistant"
     app_version: str = "1.0.0"
-    log_level: str = "INFO"
+    log_level: str = "DEBUG"
 
     # Server
     host: str = "0.0.0.0"

@@ -42,6 +42,8 @@ resource "azuread_application" "bot" {
   #   Calendars.Read            = 798ee544-9d2d-430c-a058-570e29e34338
   #   OnlineMeetings.Read.All   = c1684f21-1984-47fa-9d61-2dc8c296bb70
   #   OnlineMeetings.ReadWrite.All = a7a681dc-756e-4909-b988-f160edc6655f
+  #   Chat.Read.All             = 6b7d71aa-70aa-4810-a8d9-5d9fb2830017
+  #   Chat.ReadWrite.All        = 294ce7c9-31ba-490a-ad7d-97a7d075e4ed
   # ---------------------------------------------------------------------------
   required_resource_access {
     resource_app_id = "00000003-0000-0000-c000-000000000000" # Microsoft Graph
@@ -56,6 +58,14 @@ resource "azuread_application" "bot" {
     }
     resource_access {
       id   = "a7a681dc-756e-4909-b988-f160edc6655f" # OnlineMeetings.ReadWrite.All
+      type = "Role"
+    }
+    resource_access {
+      id   = "6b7d71aa-70aa-4810-a8d9-5d9fb2830017" # Chat.Read.All
+      type = "Role"
+    }
+    resource_access {
+      id   = "294ce7c9-31ba-490a-ad7d-97a7d075e4ed" # Chat.ReadWrite.All
       type = "Role"
     }
   }
